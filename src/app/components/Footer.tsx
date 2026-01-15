@@ -7,7 +7,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* About */}
           <div>
-            <h3 className="font-bold text-xl mb-4">GameZone</h3>
+            <h3 className="font-bold text-xl mb-4">Oyunchu.az</h3>
             <p className="text-blue-200 text-sm">
               Your ultimate destination for gaming consoles, controllers, and accessories.
             </p>
@@ -67,7 +67,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-blue-800 mt-8 pt-6 text-center text-blue-300 text-sm">
-          <p>© 2026 GameZone. All rights reserved.</p>
+          <p>© 2026 Oyunchu. All rights reserved.</p>
         </div>
       </div>
     </footer>

@@ -1,5 +1,6 @@
 import { ShoppingCart, Heart, Star } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { Link } from 'react-router-dom';
 
 export default function ProductGrid() {
   const products = [
@@ -69,9 +70,9 @@ export default function ProductGrid() {
     <div className="mb-8">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold text-blue-900">Featured Products</h2>
-        <button className="text-blue-600 hover:text-orange-500 font-semibold transition">
+        <Link to="/products" className="text-blue-600 hover:text-orange-500 font-semibold transition">
           View All →
-        </button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

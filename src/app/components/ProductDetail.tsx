@@ -34,6 +34,7 @@ export default function ProductDetail(){
   // Reviews persisted in localStorage per product
   const reviewsKey = `reviews_${pid}`;
   const [reviews, setReviews] = useState<Array<{name:string,rating:number,text:string,date:string}>>([]);
+  const [hasReviewed, setHasReviewed] = useState(false);
   const [reviewText, setReviewText] = useState('');
   const [reviewRating, setReviewRating] = useState(5);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -45,23 +46,47 @@ export default function ProductDetail(){
         // Try single product endpoint first
         try {
           const res = await axios.get(`/api/products/${pid}`);
+          console.log('PRODUCT RAW', res.data);
           const p = res.data;
+
+          // If the response is incomplete (missing id or name), fall back to fetching the product list
+          const missingCore = !p || (!(p.Id || p.id) && !(p.Name || p.name));
+          if (missingCore) throw new Error('Incomplete product response');
+
           const normalized = {
-            id: p.Id ?? p.id,
-            name: p.Name ?? p.name,
-            description: p.Description ?? p.description,
-            price: p.Price ?? p.price,
-            originalPrice: p.OriginalPrice ?? p.originalPrice,
-            imageUrl: p.ImageUrl ?? p.imageUrl,
-            rating: p.Rating ?? p.rating,
-            reviews: p.Reviews ?? p.reviews,
-            discount: p.Discount ?? p.discount,
-          };
+            id: Number(p.Id ?? p.id ?? 0),
+            name: p.Name ?? p.name ?? '',
+            description: p.Description ?? p.description ?? '',
+            price: p.Price !== undefined && p.Price !== null ? Number(p.Price) : 0,
+            originalPrice: p.OriginalPrice !== undefined && p.OriginalPrice !== null ? Number(p.OriginalPrice) : 0,
+            imageUrl: p.ImageUrl ?? p.imageUrl ?? '',
+            discount: p.Discount !== undefined && p.Discount !== null ? Number(p.Discount) : 0,
+            rating: p.Rating !== undefined && p.Rating !== null ? Number(p.Rating) : 0,
+            reviews: p.Reviews !== undefined && p.Reviews !== null ? Number(p.Reviews) : 0,
+         };
+
           setProduct(normalized);
           // if backend returned reviews list, use it
-          if (res.data && Array.isArray(res.data.ReviewsList) && res.data.ReviewsList.length) {
-            const mapped = res.data.ReviewsList.map((r:any) => ({ name: r.UserName || 'Anonymous', rating: r.Rating || 0, text: r.Comment || '', date: r.CreatedAt || new Date().toISOString() }));
-            setReviews(mapped);
+          if (res.data && Array.isArray(res.data.ReviewsList)) {
+            const mapped = res.data.ReviewsList.map((r:any) => ({ name: r.UserName || 'Anonymous', rating: r.Rating || 0, text: r.Comment || '', date: parseDateToLocalISO(r.CreatedAt) }));
+
+            // merge with any locally stored reviews to survive refresh/moderation
+            try {
+              const rawLocal = localStorage.getItem(reviewsKey);
+              const localList = rawLocal ? JSON.parse(rawLocal) : [];
+              const merged = [...mapped];
+              for (const loc of (localList || [])) {
+                const exists = merged.some((m:any) => m.name === loc.name && (m.text === loc.text || m.date === loc.date));
+                if (!exists) merged.push(loc);
+              }
+              setReviews(merged);
+              // persist merged so local pending reviews remain
+              try { localStorage.setItem(reviewsKey, JSON.stringify(merged)); } catch (e) {}
+              if (user && merged.some((m:any) => m.name === user.name)) setHasReviewed(true);
+            } catch (e) {
+              setReviews(mapped);
+              if (user && mapped.some((m:any) => m.name === user.name)) setHasReviewed(true);
+            }
           }
         } catch (err) {
           // fallback: fetch all and find product
@@ -105,11 +130,24 @@ export default function ProductDetail(){
     }
   }, [reviewsKey]);
 
+  // update hasReviewed when reviews or user change (covers local-storage reviews)
+  useEffect(() => {
+    if (!user) { setHasReviewed(false); return; }
+    const found = (reviews || []).some(r => r.name === user.name);
+    setHasReviewed(Boolean(found));
+  }, [reviews, user]);
+
   const avgRating = useMemo(() => {
-    const total = (reviews || []).reduce((s, r) => s + r.rating, 0) + (product?.rating ?? 0);
-    const count = (reviews || []).length + (product?.reviews ? 1 : 0);
-    return count ? +(total / count).toFixed(1) : 0;
-  }, [reviews, product]);
+  const r = reviews || [];
+  const productRating = Number(product?.rating ?? 0);
+  const productReviews = Number(product?.reviews ?? 0);
+
+  const total = r.reduce((sum, rev) => sum + Number(rev.rating || 0), 0) + productRating * productReviews;
+  const count = r.length + productReviews;
+
+  return count ? +(total / count).toFixed(1) : 0;
+}, [reviews, product]);
+
 
   const submitReview = async () => {
     if (!user || !token) {
@@ -117,18 +155,21 @@ export default function ProductDetail(){
       return;
     }
 
-    if (!reviewText || reviewRating <= 0) return;
+    // allow submitting rating-only reviews; only block if rating not set
+    if (reviewRating <= 0) return;
 
     try {
       const res = await axios.post(`/api/products/${pid}/reviews`, { rating: reviewRating, text: reviewText }, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (res.data && res.data.ok) {
+        if (res.data && res.data.ok) {
         const inserted = res.data.review;
-        const newEntry = { name: inserted.UserName || user.name || 'You', rating: inserted.Rating || reviewRating, text: inserted.Comment || reviewText, date: inserted.CreatedAt || new Date().toISOString() };
+        const newEntry = { name: inserted.UserName || user.name || 'You', rating: inserted.Rating || reviewRating, text: inserted.Comment || reviewText, date: parseDateToLocalISO(inserted.CreatedAt) };
         const next = [...reviews, newEntry];
         setReviews(next);
+        // persist so it remains after refresh (in case server doesn't immediately return it)
+        try { localStorage.setItem(reviewsKey, JSON.stringify(next)); } catch (e) {}
         // update local product aggregate view
         setProduct(p => p ? { ...p, rating: res.data.avgRating ?? p.rating, reviews: res.data.reviewCount ?? (p.reviews ?? 0) } : p);
         setReviewText(''); setReviewRating(5);
@@ -153,11 +194,40 @@ export default function ProductDetail(){
 
   if (loading) return <div className="p-6">Loading product...</div>;
   if (error || !product) return <div className="p-6 text-red-600">{error ?? 'Product not found'}</div>;
-  const formatPrice = (v:any) => {
+    const formatPrice = (v: any) => {
     const n = Number(v);
     if (!isFinite(n)) return '— ₼';
     return `${n.toFixed(2)} ₼`;
-  };
+    };
+
+    // Parse various DB timestamp formats into an ISO string representing the same local time
+    const parseDateToLocalISO = (val: any) => {
+      if (!val) return new Date().toISOString();
+      if (val instanceof Date) return val.toISOString();
+      const s = String(val).trim();
+      // If already ISO with timezone, keep as-is
+      if (/\d{4}-\d{2}-\d{2}T/.test(s)) {
+        try { return new Date(s).toISOString(); } catch { return new Date().toISOString(); }
+      }
+      // Match SQL-style 'YYYY-MM-DD HH:MM:SS' (with optional milliseconds)
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+      if (m) {
+        const year = Number(m[1]), month = Number(m[2]) - 1, day = Number(m[3]);
+        const hh = Number(m[4]), mm = Number(m[5]), ss = Number(m[6]);
+        const dt = new Date(year, month, day, hh, mm, ss); // local time
+        return dt.toISOString();
+      }
+      // Fallback
+      try { return new Date(s).toISOString(); } catch { return new Date().toISOString(); }
+    };
+
+    const maskName = (name?: string) => {
+      if (!name) return 'An****';
+      const s = String(name).trim();
+      if (s.length <= 2) return s;
+      return s.slice(0,2) + '*'.repeat(s.length - 2);
+    };
+
 
   return (
     <div className="container mx-auto p-6">
@@ -184,7 +254,7 @@ export default function ProductDetail(){
                 <div className="text-sm text-gray-400 line-through mb-4">{formatPrice(product.originalPrice)}</div>
               )}
               <div className="flex gap-3">
-                <button onClick={() => addToCart({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl, qty: 1 })} className="bg-blue-600 text-white px-4 py-2 rounded">Add to Cart <ShoppingCart size={14} className="inline-block ml-2"/></button>
+                <button onClick={() => addToCart({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl })} className="bg-blue-600 text-white px-4 py-2 rounded">Add to Cart <ShoppingCart size={14} className="inline-block ml-2"/></button>
                 <button onClick={() => {
                   if (inWishlist(product.id)) removeFromWishlist(product.id); else addToWishlist({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl });
                 }} className="px-4 py-2 rounded border">
@@ -207,7 +277,7 @@ export default function ProductDetail(){
               {reviews.map((r, idx) => (
                 <div key={idx} className="border rounded p-3">
                   <div className="flex items-center justify-between">
-                    <div className="font-semibold">{r.name}</div>
+                      <div className="font-semibold">{maskName(r.name)}</div>
                     <div className="text-sm text-gray-500">{new Date(r.date).toLocaleString()}</div>
                   </div>
                   <div className="flex items-center gap-2 text-yellow-400 mt-2">
@@ -219,33 +289,39 @@ export default function ProductDetail(){
             </div>
 
             <div className="mt-6">
-              <h4 className="font-semibold mb-3">Rəy yaz</h4>
+              {hasReviewed ? (
+                <div className="p-4 bg-green-50 border rounded text-gray-800">Siz artıq bu məhsula rəy yazmısınız.</div>
+              ) : (
+                <>
+                  <h4 className="font-semibold mb-3">Rəy yaz</h4>
 
-              <div className="flex items-center gap-2 mb-2">
-                <div className="text-sm">Sizin qiymətiniz:</div>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: 5 }).map((_, i) => {
-                    const val = i + 1;
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => setReviewRating(val)}
-                        className="p-1"
-                        aria-label={`Rate ${val}`}
-                      >
-                        <Star size={18} className={val <= reviewRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="text-sm">Sizin qiymətiniz:</div>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const val = i + 1;
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setReviewRating(val)}
+                            className="p-1"
+                            aria-label={`Rate ${val}`}
+                          >
+                            <Star size={18} className={val <= reviewRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-              <textarea value={reviewText} onChange={(e)=>setReviewText(e.target.value)} className="w-full border rounded p-2" rows={4} placeholder="Rəyinizi yazın..." />
-              <div className="flex gap-3 mt-2">
-                <button onClick={submitReview} className="bg-blue-600 text-white px-4 py-2 rounded">Göndər</button>
-                <button onClick={()=>{setReviewText(''); setReviewRating(5);}} className="px-4 py-2 border rounded">Təmizlə</button>
-              </div>
+                  <textarea value={reviewText} onChange={(e)=>setReviewText(e.target.value)} className="w-full border rounded p-2" rows={4} placeholder="Rəyinizi yazın... (isteğe bağlı)" />
+                  <div className="flex gap-3 mt-2">
+                    <button onClick={submitReview} className="bg-blue-600 text-white px-4 py-2 rounded">Göndər</button>
+                    <button onClick={()=>{setReviewText(''); setReviewRating(5);}} className="px-4 py-2 border rounded">Təmizlə</button>
+                  </div>
+                </>
+              )}
             </div>
 
             <AuthPromptModal open={showAuthModal} variant={'auth'} onClose={() => setShowAuthModal(false)} />

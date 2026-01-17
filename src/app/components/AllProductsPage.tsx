@@ -35,7 +35,17 @@ export default function AllProductsPage() {
         const res = await fetch('http://localhost:4000/api/products');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setProducts(data);
+        const normalized = (data || []).map((p: any) => ({
+          id: p.Id ?? p.id,
+          name: p.Name ?? p.name ?? p.Title ?? '',
+          price: Number(p.Price ?? p.price ?? p.PriceValue ?? 0) || 0,
+          originalPrice: Number(p.OriginalPrice ?? p.originalPrice ?? p.OldPrice ?? 0) || undefined,
+          rating: p.Rating ?? p.rating ?? 0,
+          reviews: p.Reviews ?? p.reviews ?? 0,
+          imageUrl: p.ImageUrl ?? p.imageUrl ?? p.Image ?? undefined,
+          discount: p.Discount ?? p.discount ?? 0,
+        }));
+        setProducts(normalized);
       } catch (err: any) {
         setError(err.message || 'Failed to load products');
       } finally {

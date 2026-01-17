@@ -93,7 +93,22 @@ app.get('/api/products/:id', async (req, res) => {
   if (!id) return res.status(400).json({ error: 'Invalid product id' });
   try {
     const pool = await getPool();
-    const prodRes = await pool.request().input('id', id).query('SELECT TOP 1 * FROM Products WHERE Id = @id');
+    const prodRes = await pool.request()
+      .input('id', id)
+      .query(`
+        SELECT TOP 1
+          Id,
+          Name,
+          Price,
+          OriginalPrice,
+          ImageUrl,
+          Discount,
+          Rating,
+          Reviews,
+          Description
+        FROM Products
+        WHERE Id = @id
+      `);
     if (!prodRes.recordset.length) return res.status(404).json({ error: 'Product not found' });
     const product = prodRes.recordset[0];
 
@@ -104,12 +119,13 @@ app.get('/api/products/:id', async (req, res) => {
       const avg = row.AvgRating !== null ? Number(row.AvgRating) : (product.Rating ?? 0);
       const count = Number(row.ReviewCount || product.Reviews || 0);
 
-      // fetch recent approved feedback
+      // fetch recent approved feedback (map DB Created_at to CreatedAt)
       let reviewsList = [];
       try {
-        const revRes = await pool.request().input('id', id).query(`SELECT TOP (20) Id, ProductId, UserName, Comment, Rating, CreatedAt, IsApproved FROM Feedback WHERE ProductId = @id AND IsApproved = 1 ORDER BY CreatedAt DESC`);
+        const revRes = await pool.request().input('id', id).query(`SELECT TOP (20) Id, ProductId, UserName, Comment, Rating, Created_at AS CreatedAt, IsApproved FROM Feedback WHERE ProductId = @id AND IsApproved = 1 ORDER BY Created_at DESC`);
         reviewsList = revRes.recordset || [];
       } catch (re) {
+        console.warn('Failed to read Feedback list:', re);
         reviewsList = [];
       }
 
@@ -151,12 +167,19 @@ app.get('/api/products/:id', async (req, res) => {
 
 // Post a review for a product (requires auth)
 app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
+  // Accept optional token: if Authorization header present verify, else proceed as anonymous
   const id = Number(req.params.id);
   const { rating, text } = req.body;
   if (!id || !rating) return res.status(400).json({ error: 'Product id and rating are required' });
 
   try {
     const pool = await getPool();
+
+    // Require authenticated user from middleware
+    const authUser = req.user;
+    if (!authUser || !authUser.id) return res.status(401).json({ error: 'Authentication required' });
+    const userId = authUser.id;
+    const userName = authUser.name ?? 'Anonymous';
 
     // detect if Feedback table has a UserId column; prefer using UserId for uniqueness
     let hasUserId = false;
@@ -167,13 +190,10 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
       hasUserId = false;
     }
 
-    const userId = req.user?.id ?? null;
-    const userName = req.user?.name ?? 'Anonymous';
-
     // check existing feedback by this user for this product
     let existing = null;
     try {
-      if (hasUserId && userId != null) {
+      if (hasUserId) {
         const q = await pool.request().input('productId', id).input('userId', userId).query('SELECT TOP 1 * FROM Feedback WHERE ProductId = @productId AND UserId = @userId');
         existing = q.recordset && q.recordset.length ? q.recordset[0] : null;
       } else {
@@ -186,10 +206,10 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
 
     let inserted = null;
     if (existing) {
-      // update existing feedback
+      // update existing feedback (user already reviewed this product)
       try {
         const updReq = pool.request().input('id', existing.Id).input('rating', rating).input('comment', text || '');
-        const upd = await updReq.query(`UPDATE Feedback SET Rating = @rating, Comment = @comment, CreatedAt = GETDATE(), IsApproved = 1 WHERE Id = @id; SELECT TOP 1 * FROM Feedback WHERE Id = @id`);
+        const upd = await updReq.query(`UPDATE Feedback SET Rating = @rating, Comment = @comment, Created_at = GETDATE(), IsApproved = 1 WHERE Id = @id; SELECT TOP 1 * FROM Feedback WHERE Id = @id`);
         inserted = upd.recordset && upd.recordset.length ? upd.recordset[0] : null;
       } catch (ue) {
         console.error('Update feedback failed', ue);
@@ -198,14 +218,14 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
     } else {
       // insert new feedback (include UserId if column exists)
       try {
-        if (hasUserId && userId != null) {
+        if (hasUserId) {
           const ins = await pool.request()
             .input('productId', id)
             .input('userId', userId)
             .input('userName', userName)
             .input('rating', rating)
             .input('comment', text || '')
-            .query(`INSERT INTO Feedback (ProductId, UserId, UserName, Comment, Rating, CreatedAt, IsApproved)
+            .query(`INSERT INTO Feedback (ProductId, UserId, UserName, Comment, Rating, Created_at, IsApproved)
                     OUTPUT INSERTED.*
                     VALUES (@productId, @userId, @userName, @comment, @rating, GETDATE(), 1)`);
           inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
@@ -215,7 +235,7 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
             .input('userName', userName)
             .input('rating', rating)
             .input('comment', text || '')
-            .query(`INSERT INTO Feedback (ProductId, UserName, Comment, Rating, CreatedAt, IsApproved)
+            .query(`INSERT INTO Feedback (ProductId, UserName, Comment, Rating, Created_at, IsApproved)
                     OUTPUT INSERTED.*
                     VALUES (@productId, @userName, @comment, @rating, GETDATE(), 1)`);
           inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
@@ -225,6 +245,21 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
         return res.status(500).json({ error: 'Failed to save feedback', detail: String(qerr) });
       }
     }
+
+    // After insert/update: ensure only a single feedback row exists per (product,user)
+      if (inserted) {
+        try {
+          if (hasUserId) {
+            await pool.request().input('productId', id).input('userId', userId).input('keepId', inserted.Id)
+              .query('DELETE FROM Feedback WHERE ProductId = @productId AND UserId = @userId AND Id <> @keepId');
+          } else {
+            await pool.request().input('productId', id).input('userName', userName).input('keepId', inserted.Id)
+              .query("DELETE FROM Feedback WHERE ProductId = @productId AND UserName = @userName AND Id <> @keepId");
+          }
+        } catch (cleanErr) {
+          console.warn('Failed to cleanup duplicate feedback rows:', cleanErr);
+        }
+      }
 
     // recompute aggregates (approved only)
     try {

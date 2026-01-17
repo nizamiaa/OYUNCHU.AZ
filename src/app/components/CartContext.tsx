@@ -41,7 +41,17 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       const key = storageKey(user.id);
       const raw = localStorage.getItem(key);
       if (raw) {
-        setItems(JSON.parse(raw));
+        // normalize stored items to ensure correct keys
+        const parsed: any[] = JSON.parse(raw);
+        const normalized = parsed.map((p) => ({
+          id: p.id ?? p.Id ?? p.ProductId,
+          name: p.name ?? p.Name ?? p.Title ?? '',
+          price: Number(p.price ?? p.Price ?? p.PriceValue ?? 0) || 0,
+          imageUrl: p.imageUrl ?? p.ImageUrl ?? p.Image ?? undefined,
+          oldPrice: p.oldPrice ?? p.OriginalPrice ?? p.old_price ?? undefined,
+          qty: p.qty ?? p.Qty ?? p.quantity ?? 1,
+        }));
+        setItems(normalized as any);
         return;
       }
       setItems([]);
@@ -63,16 +73,23 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   }, [items, user?.id]);
 
   const addToCart = (product: Omit<CartItem, "qty">) => {
+    // normalize incoming product shape (accept PascalCase from API)
+    const p = {
+      id: (product as any).id ?? (product as any).Id ?? (product as any).ProductId,
+      name: (product as any).name ?? (product as any).Name ?? (product as any).Title,
+      price: Number((product as any).price ?? (product as any).Price ?? 0) || 0,
+      imageUrl: (product as any).imageUrl ?? (product as any).ImageUrl ?? (product as any).Image,
+      oldPrice: (product as any).oldPrice ?? (product as any).OriginalPrice ?? undefined,
+    } as Omit<CartItem, 'qty'>;
+
     setItems((prev) => {
-      const exists = prev.find((i) => i.id === product.id);
+      const exists = prev.find((i) => i.id === p.id);
 
       if (exists) {
-        return prev.map((i) =>
-          i.id === product.id ? { ...i, qty: i.qty + 1 } : i
-        );
+        return prev.map((i) => (i.id === p.id ? { ...i, qty: i.qty + 1 } : i));
       }
 
-      return [...prev, { ...product, qty: 1 }];
+      return [...prev, { ...p, qty: 1 } as CartItem];
     });
   };
 

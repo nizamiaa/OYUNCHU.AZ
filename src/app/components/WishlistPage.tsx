@@ -49,7 +49,7 @@ export default function WishlistPage(){
                     <button
                       onClick={() => {
                         try {
-                          addToCart({ id: i.id, name: i.name, price: i.price || 0, imageUrl: i.imageUrl, qty: 1 });
+                          addToCart({ id: i.id, name: i.name, price: i.price || 0, imageUrl: i.imageUrl });
                           // remove from wishlist after adding to cart
                           remove(i.id);
                         } catch (err) {

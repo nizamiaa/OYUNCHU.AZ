@@ -27,8 +27,16 @@ export const WishlistProvider = ({ children }: { children: React.ReactNode }) =>
   useEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey(user?.id ?? null));
-      if (raw) setItems(JSON.parse(raw));
-      else setItems([]);
+      if (raw) {
+        const parsed: any[] = JSON.parse(raw);
+        const normalized = parsed.map((p) => ({
+          id: p.id ?? p.Id ?? p.ProductId,
+          name: p.name ?? p.Name ?? p.Title ?? '',
+          price: Number(p.price ?? p.Price ?? 0) || 0,
+          imageUrl: p.imageUrl ?? p.ImageUrl ?? p.Image ?? undefined,
+        }));
+        setItems(normalized);
+      } else setItems([]);
     } catch (err) {
       console.error('Failed to load wishlist', err);
       setItems([]);
@@ -44,9 +52,17 @@ export const WishlistProvider = ({ children }: { children: React.ReactNode }) =>
   }, [items, user?.id]);
 
   const add = (item: WishlistItem) => {
+    // normalize incoming item shape
+    const it = {
+      id: (item as any).id ?? (item as any).Id ?? (item as any).ProductId,
+      name: (item as any).name ?? (item as any).Name ?? (item as any).Title ?? '',
+      price: Number((item as any).price ?? (item as any).Price ?? 0) || 0,
+      imageUrl: (item as any).imageUrl ?? (item as any).ImageUrl ?? (item as any).Image ?? undefined,
+    } as WishlistItem;
+
     setItems((prev) => {
-      if (prev.find((p) => p.id === item.id)) return prev;
-      return [...prev, item];
+      if (prev.find((p) => p.id === it.id)) return prev;
+      return [...prev, it];
     });
   };
 

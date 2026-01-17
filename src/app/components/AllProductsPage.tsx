@@ -20,9 +20,6 @@ export default function AllProductsPage() {
   const [error, setError] = useState<string | null>(null);
   const { addToCart } = useCart();
 
-  <button onClick={() => addToCart(products)}>
-  <ShoppingCart size={20} /> Add to Cart
-</button>
 
   useEffect(() => {
     const load = async () => {
@@ -115,7 +112,18 @@ export default function AllProductsPage() {
                 </div>
 
                 {/* BUTTON */}
-                <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-orange-500 transition flex items-center justify-center gap-2 font-semibold">
+                <button
+                  onClick={() =>
+                    addToCart({
+                      id: product.id,
+                      name: product.name,
+                      price: product.price,
+                      imageUrl: product.imageUrl || undefined,
+                      oldPrice: product.originalPrice || undefined,
+                    })
+                  }
+                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-orange-500 transition flex items-center justify-center gap-2 font-semibold"
+                >
                   <ShoppingCart size={20} />
                   Add to Cart
                 </button>

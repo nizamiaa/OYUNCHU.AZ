@@ -1,7 +1,7 @@
 import { Search, Heart, ShoppingCart, Menu, User, Globe } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { useNavigate } from "react-router-dom";
+import axios from 'axios';
 import { useCart } from "../components/CartContext";
 
 export default function Header() {
@@ -20,19 +20,67 @@ export default function Header() {
     mode: 'login'
   });
 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+
+  const searchRef = useRef<HTMLDivElement>(null);
+
   // 🔒 Scroll lock when modal open
   useEffect(() => {
     document.body.style.overflow = modal.open ? 'hidden' : 'auto';
   }, [modal.open]);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setDropdownVisible(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Live search with debounce
+  useEffect(() => {
+    if (!searchTerm) {
+      setFilteredProducts([]);
+      setDropdownVisible(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await axios.get(`http://localhost:4000/api/products/search`, { params: { q: searchTerm } });
+        // Normalize DB fields (Id/Name/Description) to lowercase keys used across the app
+        const normalized = (res.data || []).map((p: any) => ({
+          id: p.Id ?? p.id,
+          name: p.Name ?? p.name,
+          description: p.Description ?? p.description ?? '',
+          price: p.Price ?? p.price,
+          originalPrice: p.OriginalPrice ?? p.originalPrice,
+          imageUrl: p.ImageUrl ?? p.imageUrl,
+          discount: p.Discount ?? p.discount,
+        }));
+        setFilteredProducts(normalized);
+        setDropdownVisible(true);
+      } catch (err) {
+        console.error(err);
+        setFilteredProducts([]);
+        setDropdownVisible(false);
+      }
+    }, 300); // debounce
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   return (
     <header className="bg-white shadow-md sticky top-0 z-50">
       {/* Top Header */}
       <div className="bg-blue-600 text-white py-2 px-4">
         <div className="container mx-auto flex justify-between items-center">
-          <Link to="/" className="text-2xl font-bold">
-            Oyunchu
-          </Link>
+          <Link to="/" className="text-2xl font-bold">Oyunchu</Link>
 
           <div className="flex gap-6">
             <button className="hover:text-orange-400 transition">Campaigns</button>
@@ -40,10 +88,7 @@ export default function Header() {
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setModal({ open: true, mode: 'login' })}
-              className="flex items-center gap-2 hover:text-orange-400 transition"
-            >
+            <button onClick={() => setModal({ open: true, mode: 'login' })} className="flex items-center gap-2 hover:text-orange-400 transition">
               <User size={20} />
               <span>Login</span>
             </button>
@@ -68,10 +113,7 @@ export default function Header() {
 
             <div className="absolute hidden group-hover:block top-full left-0 mt-1 bg-white shadow-xl rounded-lg w-64 py-2 border">
               {categories.map((category, index) => (
-                <button
-                  key={index}
-                  className="block w-full text-left px-4 py-2 hover:bg-blue-50 hover:text-blue-600 transition"
-                >
+                <button key={index} className="block w-full text-left px-4 py-2 hover:bg-blue-50 hover:text-blue-600 transition">
                   {category}
                 </button>
               ))}
@@ -79,61 +121,81 @@ export default function Header() {
           </div>
 
           {/* Search */}
-          <div className="flex-1 mx-8">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search for consoles, games, accessories..."
-                className="w-full px-4 py-2 pr-12 border-2 border-blue-300 rounded-lg focus:border-blue-500 focus:outline-none"
-              />
-              <button className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition">
-                <Search size={20} />
-              </button>
-            </div>
+          <div className="flex-1 mx-8 relative" ref={searchRef}>
+            <input
+              type="text"
+              placeholder="Search for consoles, games, accessories..."
+              className="w-full px-4 py-2 pr-12 border-2 border-blue-300 rounded-lg focus:border-blue-500 focus:outline-none"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onFocus={() => searchTerm && setDropdownVisible(true)}
+            />
+            <button className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition">
+              <Search size={20} />
+            </button>
+
+            {/* Dropdown results */}
+            {dropdownVisible && (
+              <div className="absolute top-full left-0 w-full bg-white shadow-lg rounded-lg mt-1 max-h-64 overflow-y-auto z-50">
+                {filteredProducts.length > 0 ? (
+                  filteredProducts.map((p: any) => (
+                    <Link
+                      key={p.id}
+                      to={`/products/${p.id}`}
+                      className="block px-4 py-2 hover:bg-blue-50"
+                      onClick={() => setDropdownVisible(false)}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={p.imageUrl || '/placeholder.png'}
+                            alt={p.name}
+                            className="w-12 h-12 object-cover rounded"
+                          />
+                          <div className="text-sm text-gray-800">
+                            <div className="font-medium truncate max-w-[240px]">{p.name}</div>
+                            <div className="text-xs text-gray-500 truncate">{p.description}</div>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-sm text-gray-500">Price</div>
+                          <div className="font-semibold text-blue-600">{p.price ? Number(p.price).toFixed(2) + ' ₼' : '-'}</div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="px-4 py-2 text-gray-500">No results found</div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Icons */}
           <div className="flex items-center gap-4">
             <button className="relative p-2 hover:bg-gray-100 rounded-lg transition">
               <Heart size={24} className="text-blue-600" />
-              <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                0
-              </span>
+              <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">0</span>
             </button>
             <Link to="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-lg transition">
-  <ShoppingCart size={24} className="text-blue-600" />
-  {totalQty > 0 && (
-    <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-      {totalQty}
-    </span>
-  )}
-</Link>
-
+              <ShoppingCart size={24} className="text-blue-600" />
+              {totalQty > 0 && (
+                <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{totalQty}</span>
+              )}
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* 🔥 MODAL + BLUR */}
+      {/* MODAL */}
       {modal.open && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center">
-          {/* Blur Overlay */}
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-md"
-            onClick={() => setModal({ ...modal, open: false })}
-          />
-
-          {/* Modal */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-md" onClick={() => setModal({ ...modal, open: false })}/>
           <div className="relative z-10 bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                {modal.mode === 'login' ? 'Login' : 'Register'}
-              </h3>
-              <button
-                className="text-gray-500 hover:text-black"
-                onClick={() => setModal({ ...modal, open: false })}
-              >
-                ✕
-              </button>
+              <h3 className="text-lg font-semibold">{modal.mode === 'login' ? 'Login' : 'Register'}</h3>
+              <button className="text-gray-500 hover:text-black" onClick={() => setModal({ ...modal, open: false })}>✕</button>
             </div>
 
             {modal.mode === 'login' ? (
@@ -146,16 +208,10 @@ export default function Header() {
                   <label className="block text-sm font-medium mb-1">Password</label>
                   <input type="password" required className="w-full px-3 py-2 border rounded" />
                 </div>
-                <button className="w-full bg-blue-600 text-white py-2 rounded">
-                  Sign in
-                </button>
+                <button className="w-full bg-blue-600 text-white py-2 rounded">Sign in</button>
                 <p className="text-sm text-center">
                   Don&apos;t have an account?{' '}
-                  <button
-                    type="button"
-                    className="text-blue-600 underline"
-                    onClick={() => setModal({ open: true, mode: 'register' })}
-                  >
+                  <button type="button" className="text-blue-600 underline" onClick={() => setModal({ open: true, mode: 'register' })}>
                     Register
                   </button>
                 </p>
@@ -174,16 +230,10 @@ export default function Header() {
                   <label className="block text-sm font-medium mb-1">Password</label>
                   <input type="password" required className="w-full px-3 py-2 border rounded" />
                 </div>
-                <button className="w-full bg-blue-600 text-white py-2 rounded">
-                  Create account
-                </button>
+                <button className="w-full bg-blue-600 text-white py-2 rounded">Create account</button>
                 <p className="text-sm text-center">
                   Already have an account?{' '}
-                  <button
-                    type="button"
-                    className="text-blue-600 underline"
-                    onClick={() => setModal({ open: true, mode: 'login' })}
-                  >
+                  <button type="button" className="text-blue-600 underline" onClick={() => setModal({ open: true, mode: 'login' })}>
                     Login
                   </button>
                 </p>

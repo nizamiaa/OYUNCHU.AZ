@@ -38,6 +38,42 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
+// Search products by name (query param: q)
+// backend/index.js
+app.get('/api/products/search', async (req, res) => {
+  const searchTerm = req.query.q || '';
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    request.input('search', `%${searchTerm}%`);
+
+    // DB sütun adlarına uyğun query
+    const result = await request.query(`
+      SELECT TOP (50) 
+        Id, 
+        Name, 
+        Description, 
+        Price, 
+        OriginalPrice, 
+        Rating, 
+        Reviews, 
+        ImageUrl, 
+        Discount, 
+        Created_at, 
+        Updated_at
+      FROM Products
+      WHERE Name LIKE @search
+    `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+
+
 // Get consoles (adjust table name if needed)
 app.get('/api/consoles', async (req, res) => {
   try {

@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ShoppingCart, Heart, Star } from 'lucide-react';
+import { useWishlist } from './WishlistContext';
+import { useAuth } from './AuthContext';
+import AuthPromptModal from './AuthPromptModal';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { useCart } from './CartContext';
 
@@ -19,6 +22,9 @@ export default function AllProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { addToCart } = useCart();
+  const { add: addToWishlist, remove: removeFromWishlist, contains: inWishlist } = useWishlist();
+  const auth = useAuth();
+  const [modalOpen, setModalOpen] = React.useState(false);
 
 
   useEffect(() => {
@@ -68,8 +74,26 @@ export default function AllProductsPage() {
                   </span>
                 )}
 
-                <button className="absolute top-3 left-3 bg-white p-2 rounded-full shadow-md hover:bg-red-50 transition">
-                  <Heart size={20} className="text-red-500" />
+                <button
+                  className="absolute top-3 left-3 bg-white p-2 rounded-full shadow-md hover:bg-red-50 transition"
+                  onClick={() => {
+                    if (!auth.isAuthenticated) {
+                      setModalOpen(true);
+                      return;
+                    }
+
+                    if (inWishlist(product.id)) {
+                      removeFromWishlist(product.id);
+                    } else {
+                      addToWishlist({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl });
+                    }
+                  }}
+                >
+                  <Heart
+                    size={20}
+                    className={inWishlist(product.id) ? 'text-red-500' : 'text-gray-400'}
+                    fill={inWishlist(product.id) ? 'currentColor' : 'none'}
+                  />
                 </button>
               </div>
 

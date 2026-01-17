@@ -4,9 +4,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCart } from "../components/CartContext";
 import { useAuth } from './AuthContext';
+import { useWishlist } from './WishlistContext';
 
 export default function Header() {
   const { totalQty } = useCart();
+  const { items: wishlistItems } = useWishlist();
   const categories = [
     'PlayStation 5',
     'Xbox Series X/S',
@@ -186,9 +188,18 @@ export default function Header() {
 
           {/* Icons */}
           <div className="flex items-center gap-4">
-            <button className="relative p-2 hover:bg-gray-100 rounded-lg transition">
-              <Heart size={24} className="text-blue-600" />
-              <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">0</span>
+            <button
+              className="relative p-2 hover:bg-gray-100 rounded-lg transition"
+              onClick={() => {
+                if (!auth.isAuthenticated) {
+                  setModal({ open: true, mode: 'login' });
+                  return;
+                }
+                navigate('/wishlist');
+              }}
+            >
+              <Heart size={24} className={wishlistItems.length > 0 ? 'text-red-600' : 'text-blue-600'} fill={wishlistItems.length > 0 ? 'currentColor' : 'none'} />
+              <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{wishlistItems.length}</span>
             </button>
             <Link to="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-lg transition">
               <ShoppingCart size={24} className="text-blue-600" />

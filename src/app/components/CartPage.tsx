@@ -27,6 +27,21 @@ export default function CartPage() {
 
   const allSelected = useMemo(() => items.length > 0 && selected.length === items.length, [items, selected]);
 
+  const subtotal = useMemo(() => {
+    return items.reduce((sum, i) => sum + ((i.oldPrice ?? i.price) * i.qty), 0);
+  }, [items]);
+
+  const totalDiscount = useMemo(() => {
+    return items.reduce((sum, i) => {
+      const disc = i.oldPrice ? (i.oldPrice - i.price) : 0;
+      return sum + disc * i.qty;
+    }, 0);
+  }, [items]);
+
+  const finalTotal = useMemo(() => {
+    return items.reduce((sum, i) => sum + i.price * i.qty, 0);
+  }, [items]);
+
   const toggleSelect = (id: number) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 

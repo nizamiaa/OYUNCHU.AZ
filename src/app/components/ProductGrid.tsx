@@ -2,6 +2,9 @@ import { ShoppingCart, Heart, Star } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from "./CartContext";
+import { useWishlist } from './WishlistContext';
+import { useAuth } from './AuthContext';
+import AuthPromptModal from './AuthPromptModal';
 import axios from 'axios';
 import React, { useEffect, useState, useRef } from 'react';
 
@@ -19,6 +22,9 @@ type Product = {
 export default function ProductGrid() {
   const { addToCart } = useCart();
   const navigate = useNavigate();
+  const { add: addToWishlist, contains: inWishlist, remove: removeFromWishlist } = useWishlist();
+  const { user } = useAuth();
+  const [modalOpen, setModalOpen] = React.useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,10 +113,33 @@ export default function ProductGrid() {
                   -{product.discount}%
                 </span>
               )}
-              <button className="absolute top-3 left-3 bg-white p-2 rounded-full shadow-md hover:bg-red-50 transition">
-                <Heart size={20} className="text-red-500" />
+              <button
+                className="absolute top-3 left-3 bg-white p-2 rounded-full shadow-md hover:bg-red-50 transition"
+                onClick={() => {
+                  if (!user) {
+                    setModalOpen(true);
+                    return;
+                  }
+
+                  if (inWishlist(product.id)) {
+                    // if already in wishlist, remove it
+                    removeFromWishlist(product.id);
+                    return;
+                  }
+
+                  // add to wishlist silently — heart will show filled state
+                  addToWishlist({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl });
+                }}
+              >
+                <Heart
+                  size={20}
+                  className={inWishlist(product.id) ? 'text-red-500' : 'text-gray-400'}
+                  fill={inWishlist(product.id) ? 'currentColor' : 'none'}
+                />
               </button>
             </div>
+
+            <AuthPromptModal open={modalOpen} variant={'auth'} onClose={() => setModalOpen(false)} />
 
             <div className="p-4">
               <h3 className="font-bold text-lg text-gray-800 mb-2">{product.name}</h3>

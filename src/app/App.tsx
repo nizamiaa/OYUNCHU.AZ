@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { CartProvider } from "./components/CartContext";
 import { AuthProvider } from './components/AuthContext';
+import { WishlistProvider } from './components/WishlistContext';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 
@@ -8,6 +9,7 @@ import Header from "./components/Header";
 import HomePage from "./components/HomePage";
 import AllProductsPage from "./components/AllProductsPage";
 import CartPage from "./components/CartPage";
+import WishlistPage from './components/WishlistPage';
 
 import AdminDashboard from './components/admin/AdminDashboard';
 import ProductsManagement from './components/admin/ProductsManagement';
@@ -18,6 +20,7 @@ export default function App() {
   return (
     <AuthProvider>
       <CartProvider>
+        <WishlistProvider>
         <Router>
           <Header />
 
@@ -31,8 +34,10 @@ export default function App() {
             <Route path="/admin/products" element={<ProductsManagement />} />
             <Route path="/admin/orders" element={<OrdersManagement />} />
             <Route path="/admin/users" element={<UsersManagement />} />
+            <Route path="/wishlist" element={<WishlistPage />} />
           </Routes>
         </Router>
+        </WishlistProvider>
       </CartProvider>
     </AuthProvider>
   );

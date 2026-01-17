@@ -30,16 +30,20 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
 
   const storageKey = (uid?: number | null) => (uid ? `cart_${uid}` : `cart_guest`);
 
-  // Load cart for current user (or guest) on mount and whenever user changes
+  // Load cart for current authenticated user; when no user, keep cart empty
   useEffect(() => {
     try {
-      const key = storageKey(user?.id ?? null);
+      if (!user?.id) {
+        setItems([]);
+        return;
+      }
+
+      const key = storageKey(user.id);
       const raw = localStorage.getItem(key);
       if (raw) {
         setItems(JSON.parse(raw));
         return;
       }
-      // no saved cart -> empty
       setItems([]);
     } catch (err) {
       console.error('Failed to load cart from storage', err);
@@ -50,7 +54,8 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   // Persist cart whenever items change
   useEffect(() => {
     try {
-      const key = storageKey(user?.id ?? null);
+      if (!user?.id) return; // only persist for authenticated users
+      const key = storageKey(user.id);
       localStorage.setItem(key, JSON.stringify(items));
     } catch (err) {
       console.error('Failed to persist cart to storage', err);

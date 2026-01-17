@@ -2,72 +2,84 @@ import { ShoppingCart, Heart, Star } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from "./CartContext";
+import axios from 'axios';
+import React, { useEffect, useState, useRef } from 'react';
+
+type Product = {
+  id: number;
+  name: string;
+  price: number;
+  originalPrice?: number;
+  rating?: number;
+  reviews?: number;
+  imageUrl?: string;
+  discount?: number;
+};
 
 export default function ProductGrid() {
   const { addToCart } = useCart();
   const navigate = useNavigate();
-  const products = [
-    {
-      id: 1,
-      name: 'PlayStation 5 Console',
-      price: 499.99,
-      originalPrice: 599.99,
-      rating: 4.8,
-      reviews: 1250,
-      image: 'https://images.unsplash.com/photo-1677694690511-2e0646619c91?w=400',
-      discount: 17
-    },
-    {
-      id: 2,
-      name: 'Xbox Series X Console',
-      price: 449.99,
-      originalPrice: 499.99,
-      rating: 4.7,
-      reviews: 980,
-      image: 'https://images.unsplash.com/photo-1709587797077-7a2c94411514?w=400',
-      discount: 10
-    },
-    {
-      id: 3,
-      name: 'Nintendo Switch OLED',
-      price: 349.99,
-      originalPrice: 399.99,
-      rating: 4.9,
-      reviews: 1500,
-      image: 'https://images.unsplash.com/photo-1676261233849-0755de764396?w=400',
-      discount: 13
-    },
-    {
-      id: 4,
-      name: 'DualSense Controller',
-      price: 69.99,
-      originalPrice: 79.99,
-      rating: 4.6,
-      reviews: 850,
-      image: 'https://images.unsplash.com/photo-1611138290962-2c550ffd4002?w=400',
-      discount: 13
-    },
-    {
-      id: 5,
-      name: 'Xbox Wireless Controller',
-      price: 59.99,
-      originalPrice: 69.99,
-      rating: 4.5,
-      reviews: 720,
-      image: 'https://images.unsplash.com/photo-1611138290962-2c550ffd4002?w=400',
-      discount: 14
-    },
-    {
-      id: 6,
-      name: 'Pro Controller',
-      price: 64.99,
-      originalPrice: 74.99,
-      rating: 4.7,
-      reviews: 650,
-      image: 'https://images.unsplash.com/photo-1611138290962-2c550ffd4002?w=400',
-      discount: 13
-    }
-  ];
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await axios.get('/api/products/top-discount');
+
+        setProducts(
+          res.data.map((p: any) => ({
+            id: p.Id,
+            name: p.Name,
+            price: p.Price,
+            originalPrice: p.OriginalPrice,
+            discount: p.Discount,
+            rating: p.Rating,
+            reviews: p.Reviews,
+            imageUrl: p.ImageUrl,
+          }))
+        );
+      } catch (err) {
+        console.error(err);
+        setError('Failed to load featured products');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, []);
+
+  useEffect(() => {
+  if (!scrollRef.current || products.length === 0) return;
+
+  const container = scrollRef.current;
+  const scrollAmount = 300; // px
+  const intervalTime = 3000; // 3 saniyə
+
+  const interval = setInterval(() => {
+      if (!container) return;
+
+      // sona çatanda başa qayıtsın
+      if (
+        container.scrollLeft + container.clientWidth >=
+        container.scrollWidth - 10
+      ) {
+        container.scrollTo({ left: 0, behavior: 'smooth' });
+      } else {
+        container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      }
+    }, intervalTime);
+
+    return () => clearInterval(interval);
+  }, [products]);
+
+
+
+  if (loading) return <div className="mb-8">Loading featured products...</div>;
+  if (error) return <div className="mb-8 text-red-600">Error loading products: {error}</div>;
 
   return (
     <div className="mb-8">
@@ -78,19 +90,19 @@ export default function ProductGrid() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div ref={scrollRef} className="flex gap-6 overflow-x-auto pb-4 scroll-smooth scrollbar-hide">
         {products.map((product) => (
           <div
             key={product.id}
-            className="bg-white rounded-lg shadow-lg hover:shadow-xl transition overflow-hidden group"
+            className="min-w-[260px] sm:min-w-[280px] max-w-[280px] bg-white rounded-lg shadow-lg hover:shadow-xl transition overflow-hidden group flex-shrink-0"
           >
             <div className="relative">
               <ImageWithFallback
-                src={product.image}
+                src={product.imageUrl || ''}
                 alt={product.name}
                 className="w-full h-64 object-cover group-hover:scale-105 transition duration-300"
               />
-              {product.discount > 0 && (
+              {product.discount && product.discount > 0 && (
                 <span className="absolute top-3 right-3 bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold">
                   -{product.discount}%
                 </span>
@@ -112,9 +124,9 @@ export default function ProductGrid() {
               </div>
 
               <div className="flex items-center gap-3 mb-4">
-                <span className="text-2xl font-bold text-blue-600">${product.price}</span>
+                <span className="text-2xl font-bold text-blue-600">{Number(product.price).toFixed(2)} ₼</span>
                 {product.originalPrice && (
-                  <span className="text-lg text-gray-400 line-through">${product.originalPrice}</span>
+                  <span className="text-lg text-gray-400 line-through">{Number(product.originalPrice).toFixed(2)} ₼</span>
                 )}
               </div>
 
@@ -124,7 +136,7 @@ export default function ProductGrid() {
                     id: product.id,
                     name: product.name,
                     price: product.price,
-                    imageUrl: product.image,
+                    imageUrl: product.imageUrl || undefined,
                   });
                 }}
                 className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-orange-500 transition flex items-center justify-center gap-2 font-semibold"

@@ -59,6 +59,34 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
+// Get top discounted products (top 6 by Discount desc)
+app.get('/api/products/top-discount', async (req, res) => {
+  try {
+    const pool = await getPool();
+
+    const result = await pool.request().query(`
+      SELECT TOP 8
+        Id,
+        Name,
+        Price,
+        OriginalPrice,
+        Discount,
+        Rating,
+        Reviews,
+        ImageUrl
+      FROM Products
+      WHERE Discount > 0
+      ORDER BY Discount DESC
+    `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    console.error('Top discount error:', err);
+    res.status(500).json({ message: 'Failed to load top discount products' });
+  }
+});
+
+
 app.get('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
   try {
     const pool = await getPool();

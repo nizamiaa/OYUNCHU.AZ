@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Heart, Star } from 'lucide-react';
 import { useWishlist } from './WishlistContext';
 import { useAuth } from './AuthContext';
@@ -18,6 +19,7 @@ type Product = {
 };
 
 export default function AllProductsPage() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +60,8 @@ export default function AllProductsPage() {
           {products.map((product) => (
             <div
               key={product.id}
-              className="bg-white rounded-xl shadow-lg hover:shadow-xl transition overflow-hidden group"
+              className="bg-white rounded-xl shadow-lg hover:shadow-xl transition overflow-hidden group cursor-pointer"
+              onClick={() => navigate(`/products/${product.id}`)}
             >
               {/* IMAGE */}
               <div className="relative">
@@ -76,7 +79,8 @@ export default function AllProductsPage() {
 
                 <button
                   className="absolute top-3 left-3 bg-white p-2 rounded-full shadow-md hover:bg-red-50 transition"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     if (!auth.isAuthenticated) {
                       setModalOpen(true);
                       return;
@@ -137,15 +141,7 @@ export default function AllProductsPage() {
 
                 {/* BUTTON */}
                 <button
-                  onClick={() =>
-                    addToCart({
-                      id: product.id,
-                      name: product.name,
-                      price: product.price,
-                      imageUrl: product.imageUrl || undefined,
-                      oldPrice: product.originalPrice || undefined,
-                    })
-                  }
+                  onClick={(e) => { e.stopPropagation(); addToCart({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl || undefined, oldPrice: product.originalPrice || undefined }); }}
                   className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-orange-500 transition flex items-center justify-center gap-2 font-semibold"
                 >
                   <ShoppingCart size={20} />

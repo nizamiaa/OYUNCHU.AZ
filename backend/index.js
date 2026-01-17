@@ -87,6 +87,173 @@ app.get('/api/products/top-discount', async (req, res) => {
 });
 
 
+// Get single product with aggregated reviews/rating
+app.get('/api/products/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid product id' });
+  try {
+    const pool = await getPool();
+    const prodRes = await pool.request().input('id', id).query('SELECT TOP 1 * FROM Products WHERE Id = @id');
+    if (!prodRes.recordset.length) return res.status(404).json({ error: 'Product not found' });
+    const product = prodRes.recordset[0];
+
+    // aggregate reviews from Feedback table (approved only) if exists
+    try {
+      const agg = await pool.request().input('id', id).query(`SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1`);
+      const row = agg.recordset[0] || { AvgRating: null, ReviewCount: 0 };
+      const avg = row.AvgRating !== null ? Number(row.AvgRating) : (product.Rating ?? 0);
+      const count = Number(row.ReviewCount || product.Reviews || 0);
+
+      // fetch recent approved feedback
+      let reviewsList = [];
+      try {
+        const revRes = await pool.request().input('id', id).query(`SELECT TOP (20) Id, ProductId, UserName, Comment, Rating, CreatedAt, IsApproved FROM Feedback WHERE ProductId = @id AND IsApproved = 1 ORDER BY CreatedAt DESC`);
+        reviewsList = revRes.recordset || [];
+      } catch (re) {
+        reviewsList = [];
+      }
+
+      // return combined product info
+      const out = {
+        Id: product.Id,
+        Name: product.Name,
+        Description: product.Description,
+        Price: product.Price,
+        OriginalPrice: product.OriginalPrice,
+        ImageUrl: product.ImageUrl,
+        Discount: product.Discount,
+        Rating: +(avg).toFixed(2),
+        Reviews: count,
+        ReviewsList: reviewsList,
+      };
+      res.json(out);
+    } catch (e) {
+      // If Feedback table missing or aggregate fails, fallback to product values
+      res.json({
+        Id: product.Id,
+        Name: product.Name,
+        Description: product.Description,
+        Price: product.Price,
+        OriginalPrice: product.OriginalPrice,
+        ImageUrl: product.ImageUrl,
+        Discount: product.Discount,
+        Rating: product.Rating,
+        Reviews: product.Reviews,
+        ReviewsList: [],
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+
+// Post a review for a product (requires auth)
+app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
+  const id = Number(req.params.id);
+  const { rating, text } = req.body;
+  if (!id || !rating) return res.status(400).json({ error: 'Product id and rating are required' });
+
+  try {
+    const pool = await getPool();
+
+    // detect if Feedback table has a UserId column; prefer using UserId for uniqueness
+    let hasUserId = false;
+    try {
+      const colCheck = await pool.request().input('tbl', 'Feedback').input('col', 'UserId').query(`SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME = @col`);
+      hasUserId = (colCheck.recordset || []).length > 0;
+    } catch (e) {
+      hasUserId = false;
+    }
+
+    const userId = req.user?.id ?? null;
+    const userName = req.user?.name ?? 'Anonymous';
+
+    // check existing feedback by this user for this product
+    let existing = null;
+    try {
+      if (hasUserId && userId != null) {
+        const q = await pool.request().input('productId', id).input('userId', userId).query('SELECT TOP 1 * FROM Feedback WHERE ProductId = @productId AND UserId = @userId');
+        existing = q.recordset && q.recordset.length ? q.recordset[0] : null;
+      } else {
+        const q = await pool.request().input('productId', id).input('userName', userName).query('SELECT TOP 1 * FROM Feedback WHERE ProductId = @productId AND UserName = @userName');
+        existing = q.recordset && q.recordset.length ? q.recordset[0] : null;
+      }
+    } catch (e) {
+      existing = null;
+    }
+
+    let inserted = null;
+    if (existing) {
+      // update existing feedback
+      try {
+        const updReq = pool.request().input('id', existing.Id).input('rating', rating).input('comment', text || '');
+        const upd = await updReq.query(`UPDATE Feedback SET Rating = @rating, Comment = @comment, CreatedAt = GETDATE(), IsApproved = 1 WHERE Id = @id; SELECT TOP 1 * FROM Feedback WHERE Id = @id`);
+        inserted = upd.recordset && upd.recordset.length ? upd.recordset[0] : null;
+      } catch (ue) {
+        console.error('Update feedback failed', ue);
+        return res.status(500).json({ error: 'Failed to update feedback', detail: String(ue) });
+      }
+    } else {
+      // insert new feedback (include UserId if column exists)
+      try {
+        if (hasUserId && userId != null) {
+          const ins = await pool.request()
+            .input('productId', id)
+            .input('userId', userId)
+            .input('userName', userName)
+            .input('rating', rating)
+            .input('comment', text || '')
+            .query(`INSERT INTO Feedback (ProductId, UserId, UserName, Comment, Rating, CreatedAt, IsApproved)
+                    OUTPUT INSERTED.*
+                    VALUES (@productId, @userId, @userName, @comment, @rating, GETDATE(), 1)`);
+          inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
+        } else {
+          const ins = await pool.request()
+            .input('productId', id)
+            .input('userName', userName)
+            .input('rating', rating)
+            .input('comment', text || '')
+            .query(`INSERT INTO Feedback (ProductId, UserName, Comment, Rating, CreatedAt, IsApproved)
+                    OUTPUT INSERTED.*
+                    VALUES (@productId, @userName, @comment, @rating, GETDATE(), 1)`);
+          inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
+        }
+      } catch (qerr) {
+        console.error('Insert feedback failed:', qerr);
+        return res.status(500).json({ error: 'Failed to save feedback', detail: String(qerr) });
+      }
+    }
+
+    // recompute aggregates (approved only)
+    try {
+      const agg = await pool.request().input('id', id).query('SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1');
+      const row = agg.recordset[0] || { AvgRating: null, ReviewCount: 0 };
+      const avg = row.AvgRating !== null ? Number(row.AvgRating) : null;
+      const count = Number(row.ReviewCount || 0);
+
+      // update Products table metrics (best-effort)
+      try {
+        await pool.request().input('id', id).input('avg', avg).input('count', count)
+          .query('UPDATE Products SET Rating = @avg, Reviews = @count WHERE Id = @id');
+      } catch (e) {
+        console.warn('Failed to update product metrics', e);
+      }
+
+      return res.json({ ok: true, review: inserted, avgRating: avg, reviewCount: count, updated: !!existing });
+    } catch (e) {
+      console.error('Aggregate after feedback failed', e);
+      return res.status(500).json({ error: 'Failed to compute aggregates', detail: String(e) });
+    }
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+
 app.get('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
   try {
     const pool = await getPool();
@@ -179,7 +346,7 @@ app.post('/api/login', async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
     // JWT token
-    const token = jwt.sign({ id: user.Id, role: user.Role }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.Id, role: user.Role, name: user.Name }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
 
     res.json({ ok: true, user: { Id: user.Id, Name: user.Name, Email: user.Email, Role: user.Role }, token });
 
@@ -231,7 +398,7 @@ app.post('/api/register', async (req, res) => {
     const user = result.recordset[0];
 
     // JWT token
-    const token = jwt.sign({ id: user.Id, role: user.Role || 'user' }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.Id, role: user.Role || 'user', name: user.Name }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
 
     res.json({ ok: true, user, token });
 
@@ -243,7 +410,7 @@ app.post('/api/register', async (req, res) => {
 
 
 // Generic SQL executor (admin/debug) - use carefully
-app.post('/api/query', async (req, res) => {
+app.post('/api/query', authMiddleware(['admin']), async (req, res) => {
   const { sql } = req.body;
   if (!sql) return res.status(400).json({ error: 'sql required' });
   try {

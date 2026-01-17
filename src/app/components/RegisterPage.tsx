@@ -1,23 +1,32 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from './AuthContext';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const auth = useAuth();
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // TODO: replace with real registration
-    console.log('register', { name, email, password });
-    navigate('/');
+    setError(null);
+    try {
+      await auth.register(name, email, password);
+      // Newly registered users are regular users; redirect to home
+      navigate('/');
+    } catch (err: any) {
+      setError(err.message || 'Registration failed');
+    }
   }
 
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-md mx-auto bg-white shadow-md rounded-lg p-6">
         <h2 className="text-2xl font-semibold mb-4">Register</h2>
+        {error && <div className="text-red-600 mb-3">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Name</label>

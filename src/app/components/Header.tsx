@@ -1,8 +1,9 @@
-import { Search, Heart, ShoppingCart, Menu, User, Globe } from 'lucide-react';
+import { Search, Heart, ShoppingCart, Menu, User, Globe, LogOut } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCart } from "../components/CartContext";
+import { useAuth } from './AuthContext';
 
 export default function Header() {
   const { totalQty } = useCart();
@@ -19,6 +20,8 @@ export default function Header() {
     open: false,
     mode: 'login'
   });
+  const auth = useAuth();
+  const navigate = useNavigate();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
@@ -88,10 +91,19 @@ export default function Header() {
           </div>
 
           <div className="flex items-center gap-4">
-            <button onClick={() => setModal({ open: true, mode: 'login' })} className="flex items-center gap-2 hover:text-orange-400 transition">
-              <User size={20} />
-              <span>Login</span>
-            </button>
+            {auth.isAuthenticated && auth.user ? (
+              <div className="flex items-center gap-3">
+                <div className="text-sm">Hello, <span className="font-semibold">{auth.user.name}</span></div>
+                <button onClick={() => { auth.logout(); navigate('/'); }} className="flex items-center gap-1 hover:text-orange-400 transition">
+                  <LogOut size={18} />
+                </button>
+              </div>
+            ) : (
+              <Link to="/login" className="flex items-center gap-2 hover:text-orange-400 transition">
+                <User size={20} />
+                <span>Login</span>
+              </Link>
+            )}
 
             <button className="flex items-center gap-2 hover:text-orange-400 transition">
               <Globe size={20} />

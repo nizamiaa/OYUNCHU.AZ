@@ -1,28 +1,23 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import HomePage from './components/HomePage';
-import AllProductsPage from './components/AllProductsPage';
-import AdminDashboard from './components/admin/AdminDashboard';
-import ProductsManagement from './components/admin/ProductsManagement';
-import OrdersManagement from './components/admin/OrdersManagement';
-import UsersManagement from './components/admin/UsersManagement';
-import LoginPage from './components/LoginPage';
-import RegisterPage from './components/RegisterPage';
-import BasketPage from './components/BasketPage';
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { CartProvider } from "./components/CartContext";
+
+import Header from "./components/Header";
+import HomePage from "./components/HomePage";
+import AllProductsPage from "./components/AllProductsPage";
+import CartPage from "./components/CartPage";
 
 export default function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/products" element={<AllProductsPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/admin/products" element={<ProductsManagement />} />
-        <Route path="/admin/orders" element={<OrdersManagement />} />
-        <Route path="/admin/users" element={<UsersManagement />} />
-        <Route path="/basket" element={<BasketPage />} />
-      </Routes>
-    </Router>
+    <CartProvider>
+      <Router>
+        <Header />
+
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/products" element={<AllProductsPage />} />
+          <Route path="/checkout/cart" element={<CartPage />} />
+        </Routes>
+      </Router>
+    </CartProvider>
   );
 }

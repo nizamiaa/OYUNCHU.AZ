@@ -1,8 +1,11 @@
 import { ShoppingCart, Heart, Star } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useCart } from "./CartContext";
 
 export default function ProductGrid() {
+  const { addToCart } = useCart();
+  const navigate = useNavigate();
   const products = [
     {
       id: 1,
@@ -115,10 +118,21 @@ export default function ProductGrid() {
                 )}
               </div>
 
-              <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-orange-500 transition flex items-center justify-center gap-2 font-semibold">
+              <button
+                onClick={() => {
+                  addToCart({
+                    id: product.id,
+                    name: product.name,
+                    price: product.price,
+                    imageUrl: product.image,
+                  });
+                }}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-orange-500 transition flex items-center justify-center gap-2 font-semibold"
+              >
                 <ShoppingCart size={20} />
                 Add to Cart
               </button>
+
             </div>
           </div>
         ))}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ShoppingCart, Heart, Star } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { useCart } from './CartContext';
 
 type Product = {
   id: number;
@@ -17,6 +18,11 @@ export default function AllProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { addToCart } = useCart();
+
+  <button onClick={() => addToCart(products)}>
+  <ShoppingCart size={20} /> Add to Cart
+</button>
 
   useEffect(() => {
     const load = async () => {

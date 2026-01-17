@@ -7,8 +7,6 @@ import Footer from './Footer';
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
-      
       {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
         {/* Category Sidebar + Carousel */}

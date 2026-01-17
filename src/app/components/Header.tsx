@@ -1,8 +1,11 @@
 import { Search, Heart, ShoppingCart, Menu, User, Globe } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
+import { useCart } from "../components/CartContext";
 
 export default function Header() {
+  const { totalQty } = useCart();
   const categories = [
     'PlayStation 5',
     'Xbox Series X/S',
@@ -97,12 +100,15 @@ export default function Header() {
                 0
               </span>
             </button>
-            <button className="relative p-2 hover:bg-gray-100 rounded-lg transition">
-              <ShoppingCart size={24} className="text-blue-600" />
-              <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                0
-              </span>
-            </button>
+            <Link to="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-lg transition">
+  <ShoppingCart size={24} className="text-blue-600" />
+  {totalQty > 0 && (
+    <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+      {totalQty}
+    </span>
+  )}
+</Link>
+
           </div>
         </div>
       </div>

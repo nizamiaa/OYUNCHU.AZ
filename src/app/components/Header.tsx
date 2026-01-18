@@ -57,7 +57,9 @@ export default function Header() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await axios.get(`http://localhost:4000/api/products/search`, { params: { q: searchTerm } });
+        const term = String(searchTerm || '').trim();
+        console.debug('[search] query=', term);
+        const res = await axios.get('/api/products/search', { params: { q: term } });
         // Normalize DB fields (Id/Name/Description) to lowercase keys used across the app
         const normalized = (res.data || []).map((p: any) => ({
           id: p.Id ?? p.id,
@@ -68,10 +70,43 @@ export default function Header() {
           imageUrl: p.ImageUrl ?? p.imageUrl,
           discount: p.Discount ?? p.discount,
         }));
-        setFilteredProducts(normalized);
-        setDropdownVisible(true);
-      } catch (err) {
-        console.error(err);
+        console.debug('[search] server returned', normalized.length, 'rows');
+        if (normalized.length > 0) {
+          setFilteredProducts(normalized);
+          setDropdownVisible(true);
+        } else {
+          // fallback: fetch all products and do a case-insensitive client-side filter
+          try {
+            const allRes = await axios.get('/api/products');
+            const term = String(searchTerm).trim().toLowerCase();
+            const filtered = (allRes.data || []).filter((p: any) => {
+              const name = (p.Name ?? p.name ?? '').toString().toLowerCase();
+              const desc = (p.Description ?? p.description ?? '').toString().toLowerCase();
+              return name.includes(term) || desc.includes(term);
+            }).map((p: any) => ({
+              id: p.Id ?? p.id,
+              name: p.Name ?? p.name,
+              description: p.Description ?? p.description ?? '',
+              price: p.Price ?? p.price,
+              originalPrice: p.OriginalPrice ?? p.originalPrice,
+              imageUrl: p.ImageUrl ?? p.imageUrl,
+              discount: p.Discount ?? p.discount,
+            }));
+            setFilteredProducts(filtered);
+            setDropdownVisible(filtered.length > 0);
+          } catch (e) {
+            console.error('Search fallback failed', e);
+            setFilteredProducts([]);
+            setDropdownVisible(false);
+          }
+        }
+      } catch (err: any) {
+        // Detailed error logging to help diagnose 400/500 responses
+        if (err?.response) {
+          console.error('[search] server error:', err.response.status, err.response.data);
+        } else {
+          console.error('[search] request error:', err);
+        }
         setFilteredProducts([]);
         setDropdownVisible(false);
       }

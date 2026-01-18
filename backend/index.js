@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { createRequire } from 'module';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import sql from 'mssql';
 
 dotenv.config();
 const require = createRequire(import.meta.url);
@@ -13,6 +14,14 @@ const { getPool } = require('./db.cjs');
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
+
+// Simple request logger for debugging route matching
+app.use((req, res, next) => {
+  try {
+    console.log(`[api] ${req.method} ${req.originalUrl} - query:`, req.query);
+  } catch (e) {}
+  next();
+});
 
 const PORT = process.env.PORT || 4000;
 
@@ -87,90 +96,13 @@ app.get('/api/products/top-discount', async (req, res) => {
 });
 
 
-// Get single product with aggregated reviews/rating
-app.get('/api/products/:id', async (req, res) => {
-  const id = Number(req.params.id);
-  if (!id) return res.status(400).json({ error: 'Invalid product id' });
-  try {
-    const pool = await getPool();
-    const prodRes = await pool.request()
-      .input('id', id)
-      .query(`
-        SELECT TOP 1
-          Id,
-          Name,
-          Price,
-          OriginalPrice,
-          ImageUrl,
-          Discount,
-          Rating,
-          Reviews,
-          Description
-        FROM Products
-        WHERE Id = @id
-      `);
-    if (!prodRes.recordset.length) return res.status(404).json({ error: 'Product not found' });
-    const product = prodRes.recordset[0];
-
-    // aggregate reviews from Feedback table (approved only) if exists
-    try {
-      const agg = await pool.request().input('id', id).query(`SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1`);
-      const row = agg.recordset[0] || { AvgRating: null, ReviewCount: 0 };
-      const avg = row.AvgRating !== null ? Number(row.AvgRating) : (product.Rating ?? 0);
-      const count = Number(row.ReviewCount || product.Reviews || 0);
-
-      // fetch recent approved feedback (map DB Created_at to CreatedAt)
-      let reviewsList = [];
-      try {
-        const revRes = await pool.request().input('id', id).query(`SELECT TOP (20) Id, ProductId, UserName, Comment, Rating, Created_at AS CreatedAt, IsApproved FROM Feedback WHERE ProductId = @id AND IsApproved = 1 ORDER BY Created_at DESC`);
-        reviewsList = revRes.recordset || [];
-      } catch (re) {
-        console.warn('Failed to read Feedback list:', re);
-        reviewsList = [];
-      }
-
-      // return combined product info
-      const out = {
-        Id: product.Id,
-        Name: product.Name,
-        Description: product.Description,
-        Price: product.Price,
-        OriginalPrice: product.OriginalPrice,
-        ImageUrl: product.ImageUrl,
-        Discount: product.Discount,
-        Rating: +(avg).toFixed(2),
-        Reviews: count,
-        ReviewsList: reviewsList,
-      };
-      res.json(out);
-    } catch (e) {
-      // If Feedback table missing or aggregate fails, fallback to product values
-      res.json({
-        Id: product.Id,
-        Name: product.Name,
-        Description: product.Description,
-        Price: product.Price,
-        OriginalPrice: product.OriginalPrice,
-        ImageUrl: product.ImageUrl,
-        Discount: product.Discount,
-        Rating: product.Rating,
-        Reviews: product.Reviews,
-        ReviewsList: [],
-      });
-    }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: String(err) });
-  }
-});
-
 
 // Post a review for a product (requires auth)
-app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
+app.post('/api/products/:id(\\d+)/reviews', authMiddleware(), async (req, res) => {
   // Accept optional token: if Authorization header present verify, else proceed as anonymous
-  const id = Number(req.params.id);
+  const id = parseInt(req.params.id, 10);
   const { rating, text } = req.body;
-  if (!id || !rating) return res.status(400).json({ error: 'Product id and rating are required' });
+  if (isNaN(id) || !rating) return res.status(400).json({ error: 'Product id and rating are required' });
 
   try {
     const pool = await getPool();
@@ -303,31 +235,112 @@ app.get('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
 // Search products by name (query param: q)
 // backend/index.js
 app.get('/api/products/search', async (req, res) => {
-  const searchTerm = req.query.q || '';
+  const searchTerm = (req.query.q || '').trim();
+
+  console.log('[search route] received q=', req.query.q, 'trimmed=', searchTerm);
+
+  if (!searchTerm) return res.json([]);
+
   try {
     const pool = await getPool();
     const request = pool.request();
-    request.input('search', `%${searchTerm}%`);
 
-    // DB sütun adlarına uyğun query
+    request.input('search', sql.NVarChar, `%${searchTerm}%`);
+
     const result = await request.query(`
-      SELECT TOP (50) 
-        Id, 
-        Name, 
-        Description, 
-        Price, 
-        OriginalPrice, 
-        Rating, 
-        Reviews, 
-        ImageUrl, 
-        Discount, 
-        Created_at, 
-        Updated_at
+      SELECT TOP (50)
+        Id,
+        Name,
+        Description,
+        Price,
+        OriginalPrice,
+        Rating,
+        Reviews,
+        ImageUrl,
+        Discount
       FROM Products
-      WHERE Name LIKE @search
+      WHERE Name COLLATE Latin1_General_CI_AI LIKE @search
+         OR Description COLLATE Latin1_General_CI_AI LIKE @search
     `);
 
     res.json(result.recordset);
+  } catch (err) {
+    console.error('SEARCH ERROR:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Get single product with aggregated reviews/rating
+app.get('/api/products/:id(\\d+)', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid product id' });
+  try {
+    const pool = await getPool();
+    const prodRes = await pool.request()
+      .input('id', id)
+      .query(`
+        SELECT TOP 1
+          Id,
+          Name,
+          Price,
+          OriginalPrice,
+          ImageUrl,
+          Discount,
+          Rating,
+          Reviews,
+          Description
+        FROM Products
+        WHERE Id = @id
+      `);
+    if (!prodRes.recordset.length) return res.status(404).json({ error: 'Product not found' });
+    const product = prodRes.recordset[0];
+
+    // aggregate reviews from Feedback table (approved only) if exists
+    try {
+      const agg = await pool.request().input('id', id).query(`SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1`);
+      const row = agg.recordset[0] || { AvgRating: null, ReviewCount: 0 };
+      const avg = row.AvgRating !== null ? Number(row.AvgRating) : (product.Rating ?? 0);
+      const count = Number(row.ReviewCount || product.Reviews || 0);
+
+      // fetch recent approved feedback (map DB Created_at to CreatedAt)
+      let reviewsList = [];
+      try {
+        const revRes = await pool.request().input('id', id).query(`SELECT TOP (20) Id, ProductId, UserName, Comment, Rating, Created_at AS CreatedAt, IsApproved FROM Feedback WHERE ProductId = @id AND IsApproved = 1 ORDER BY Created_at DESC`);
+        reviewsList = revRes.recordset || [];
+      } catch (re) {
+        console.warn('Failed to read Feedback list:', re);
+        reviewsList = [];
+      }
+
+      // return combined product info
+      const out = {
+        Id: product.Id,
+        Name: product.Name,
+        Description: product.Description,
+        Price: product.Price,
+        OriginalPrice: product.OriginalPrice,
+        ImageUrl: product.ImageUrl,
+        Discount: product.Discount,
+        Rating: +(avg).toFixed(2),
+        Reviews: count,
+        ReviewsList: reviewsList,
+      };
+      res.json(out);
+    } catch (e) {
+      // If Feedback table missing or aggregate fails, fallback to product values
+      res.json({
+        Id: product.Id,
+        Name: product.Name,
+        Description: product.Description,
+        Price: product.Price,
+        OriginalPrice: product.OriginalPrice,
+        ImageUrl: product.ImageUrl,
+        Discount: product.Discount,
+        Rating: product.Rating,
+        Reviews: product.Reviews,
+        ReviewsList: [],
+      });
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: String(err) });

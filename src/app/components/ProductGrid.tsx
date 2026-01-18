@@ -98,9 +98,10 @@ export default function ProductGrid() {
 
       <div ref={scrollRef} className="flex gap-6 overflow-x-auto pb-4 scroll-smooth scrollbar-hide">
         {products.map((product) => (
-          <div
+          <Link
             key={product.id}
-            className="min-w-[260px] sm:min-w-[280px] max-w-[280px] bg-white rounded-lg shadow-lg hover:shadow-xl transition overflow-hidden group flex-shrink-0"
+            to={`/products/${product.id}`}
+            className="min-w-[260px] sm:min-w-[280px] max-w-[280px] bg-white rounded-lg shadow-lg hover:shadow-xl transition overflow-hidden group flex-shrink-0 block"
           >
             <div className="relative">
               <ImageWithFallback
@@ -115,19 +116,19 @@ export default function ProductGrid() {
               )}
               <button
                 className="absolute top-3 left-3 bg-white p-2 rounded-full shadow-md hover:bg-red-50 transition"
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   if (!user) {
                     setModalOpen(true);
                     return;
                   }
 
                   if (inWishlist(product.id)) {
-                    // if already in wishlist, remove it
                     removeFromWishlist(product.id);
                     return;
                   }
 
-                  // add to wishlist silently — heart will show filled state
                   addToWishlist({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl });
                 }}
               >
@@ -160,7 +161,9 @@ export default function ProductGrid() {
               </div>
 
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   addToCart({
                     id: product.id,
                     name: product.name,
@@ -175,7 +178,7 @@ export default function ProductGrid() {
               </button>
 
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

@@ -1,66 +1,51 @@
 import AdminLayout from './AdminLayout';
 import { Plus, Edit, Trash2, Search } from 'lucide-react';
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { useAuth } from '../AuthContext';
 
 export default function ProductsManagement() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { token } = useAuth();
 
-  const products = [
-    {
-      id: 1,
-      name: 'PlayStation 5 Console',
-      category: 'Consoles',
-      price: 499.99,
-      stock: 45,
-      status: 'In Stock',
-      image: 'https://images.unsplash.com/photo-1677694690511-2e0646619c91?w=100'
-    },
-    {
-      id: 2,
-      name: 'Xbox Series X Console',
-      category: 'Consoles',
-      price: 449.99,
-      stock: 32,
-      status: 'In Stock',
-      image: 'https://images.unsplash.com/photo-1709587797077-7a2c94411514?w=100'
-    },
-    {
-      id: 3,
-      name: 'Nintendo Switch OLED',
-      category: 'Consoles',
-      price: 349.99,
-      stock: 58,
-      status: 'In Stock',
-      image: 'https://images.unsplash.com/photo-1676261233849-0755de764396?w=100'
-    },
-    {
-      id: 4,
-      name: 'DualSense Controller',
-      category: 'Controllers',
-      price: 69.99,
-      stock: 120,
-      status: 'In Stock',
-      image: 'https://images.unsplash.com/photo-1611138290962-2c550ffd4002?w=100'
-    },
-    {
-      id: 5,
-      name: 'Xbox Wireless Controller',
-      category: 'Controllers',
-      price: 59.99,
-      stock: 8,
-      status: 'Low Stock',
-      image: 'https://images.unsplash.com/photo-1611138290962-2c550ffd4002?w=100'
-    },
-    {
-      id: 6,
-      name: 'Pro Controller',
-      category: 'Controllers',
-      price: 64.99,
-      stock: 0,
-      status: 'Out of Stock',
-      image: 'https://images.unsplash.com/photo-1611138290962-2c550ffd4002?w=100'
-    }
-  ];
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        // Try admin products (requires token). If unauthorized, fall back to public products.
+        let res;
+        try {
+          res = await axios.get('/api/admin/products', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        } catch (e: any) {
+          // If unauthorized or forbidden, fallback to public products list
+          if (e.response && (e.response.status === 401 || e.response.status === 403)) {
+            console.warn('Admin products unauthorized, falling back to public /api/products');
+            res = await axios.get('/api/products');
+          } else {
+            throw e;
+          }
+        }
+        if (cancelled) return;
+        setProducts(res.data || []);
+      } catch (e: any) {
+        console.error('Failed to load products', e);
+        setError(e.response?.data?.error || e.message || 'Failed to load products');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const filtered = (products || []).filter((p: any) => {
+    const name = (p.Name ?? p.name ?? '').toString().toLowerCase();
+    return !searchTerm.trim() || name.includes(searchTerm.toLowerCase());
+  });
 
   return (
     <AdminLayout>
@@ -116,32 +101,37 @@ export default function ProductsManagement() {
                 </tr>
               </thead>
               <tbody>
-                {products.map((product) => (
-                  <tr key={product.id} className="border-b hover:bg-gray-50 transition">
+                {loading && <tr><td colSpan={6} className="py-6 px-4 text-center">Loading products...</td></tr>}
+                {!loading && filtered.map((product: any) => (
+                  <tr key={product.Id ?? product.id} className="border-b hover:bg-gray-50 transition">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <img
-                          src={product.image}
-                          alt={product.name}
+                          src={product.ImageUrl ?? product.imageUrl}
+                          alt={product.Name ?? product.name}
                           className="w-12 h-12 rounded-lg object-cover"
                         />
-                        <span className="font-medium">{product.name}</span>
+                        <span className="font-medium">{product.Name ?? product.name}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-gray-600">{product.category}</td>
-                    <td className="py-3 px-4 font-semibold text-blue-600">${product.price}</td>
-                    <td className="py-3 px-4">{product.stock}</td>
+                    <td className="py-3 px-4 text-gray-600">{product.Category ?? product.category ?? '—'}</td>
+                    <td className="py-3 px-4 font-semibold text-blue-600">
+                      {(() => {
+                        const price = parseFloat(product.price);
+                        return !isNaN(price) ? `$${price.toFixed(2)}` : '—';
+                      })()}
+                    </td>
+                    <td className="py-3 px-4">{product.Stock ?? product.stock ?? '—'}</td>
                     <td className="py-3 px-4">
                       <span
                         className={`px-3 py-1 rounded-full text-sm font-medium ${
-                          product.status === 'In Stock'
+                          (product.Status === 'In Stock' || (product.Stock ?? product.stock) > 0)
                             ? 'bg-green-100 text-green-700'
-                            : product.status === 'Low Stock'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}
-                      >
-                        {product.status}
+                            : (product.Stock ?? product.stock) === 0
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                        {product.Status ?? ((product.Stock ?? product.stock) > 0 ? 'In Stock' : 'Out of Stock')}
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -156,6 +146,7 @@ export default function ProductsManagement() {
                     </td>
                   </tr>
                 ))}
+                {!loading && !filtered.length && <tr><td colSpan={6} className="py-6 px-4 text-center">No products found.</td></tr>}
               </tbody>
             </table>
           </div>

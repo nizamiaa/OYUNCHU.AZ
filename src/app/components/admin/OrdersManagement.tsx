@@ -1,66 +1,34 @@
 import AdminLayout from './AdminLayout';
 import { Eye, Search } from 'lucide-react';
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { useAuth } from '../AuthContext';
 
 export default function OrdersManagement() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { token } = useAuth();
 
-  const orders = [
-    {
-      id: '#ORD-1001',
-      customer: 'John Doe',
-      date: '2026-01-11',
-      items: 3,
-      total: 589.97,
-      status: 'Delivered',
-      payment: 'Credit Card'
-    },
-    {
-      id: '#ORD-1002',
-      customer: 'Jane Smith',
-      date: '2026-01-11',
-      items: 1,
-      total: 499.99,
-      status: 'Processing',
-      payment: 'PayPal'
-    },
-    {
-      id: '#ORD-1003',
-      customer: 'Mike Johnson',
-      date: '2026-01-10',
-      items: 2,
-      total: 419.98,
-      status: 'Shipped',
-      payment: 'Credit Card'
-    },
-    {
-      id: '#ORD-1004',
-      customer: 'Sarah Williams',
-      date: '2026-01-10',
-      items: 5,
-      total: 824.95,
-      status: 'Pending',
-      payment: 'Bank Transfer'
-    },
-    {
-      id: '#ORD-1005',
-      customer: 'Tom Brown',
-      date: '2026-01-09',
-      items: 1,
-      total: 349.99,
-      status: 'Delivered',
-      payment: 'Credit Card'
-    },
-    {
-      id: '#ORD-1006',
-      customer: 'Emily Davis',
-      date: '2026-01-09',
-      items: 4,
-      total: 679.96,
-      status: 'Cancelled',
-      payment: 'PayPal'
-    }
-  ];
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get('/api/admin/orders', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (cancelled) return;
+        setOrders(res.data || []);
+      } catch (e: any) {
+        console.error('Failed to load orders', e);
+        setError(e.response?.data?.error || e.message || 'Failed to load orders');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [token]);
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -132,17 +100,20 @@ export default function OrdersManagement() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => (
-                  <tr key={order.id} className="border-b hover:bg-gray-50 transition">
-                    <td className="py-3 px-4 font-mono font-semibold text-blue-600">{order.id}</td>
-                    <td className="py-3 px-4">{order.customer}</td>
-                    <td className="py-3 px-4 text-gray-600">{order.date}</td>
-                    <td className="py-3 px-4">{order.items}</td>
-                    <td className="py-3 px-4 font-semibold">${order.total.toFixed(2)}</td>
-                    <td className="py-3 px-4 text-gray-600">{order.payment}</td>
+                {loading && <tr><td colSpan={8} className="py-6 px-4 text-center">Loading orders...</td></tr>}
+                {!loading && error && <tr><td colSpan={8} className="py-6 px-4 text-center text-red-600">{error}</td></tr>}
+                {!loading && !orders.length && !error && <tr><td colSpan={8} className="py-6 px-4 text-center">No orders available. If you have an Orders table, ensure its name and schema match expected fields.</td></tr>}
+                {!loading && orders.map((order: any) => (
+                  <tr key={order.Id ?? order.id} className="border-b hover:bg-gray-50 transition">
+                    <td className="py-3 px-4 font-mono font-semibold text-blue-600">{order.Id ?? order.id}</td>
+                    <td className="py-3 px-4">{order.CustomerName ?? order.customer ?? order.UserName ?? '—'}</td>
+                    <td className="py-3 px-4 text-gray-600">{(order.CreatedAt || order.Created_at || order.date) ? new Date(order.CreatedAt || order.Created_at || order.date).toLocaleDateString() : '—'}</td>
+                    <td className="py-3 px-4">{order.ItemsCount ?? order.items ?? '—'}</td>
+                    <td className="py-3 px-4 font-semibold">{order.Total ? `$${Number(order.Total).toFixed(2)}` : (order.total ? `$${Number(order.total).toFixed(2)}` : '—')}</td>
+                    <td className="py-3 px-4 text-gray-600">{order.PaymentMethod ?? order.payment ?? '—'}</td>
                     <td className="py-3 px-4">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-                        {order.status}
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.Status ?? order.status ?? 'Pending')}`}>
+                        {order.Status ?? order.status ?? 'Pending'}
                       </span>
                     </td>
                     <td className="py-3 px-4">

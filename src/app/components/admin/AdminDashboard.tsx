@@ -1,30 +1,55 @@
 import AdminLayout from './AdminLayout';
 import { TrendingUp, ShoppingBag, Users, DollarSign } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { useAuth } from '../AuthContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function AdminDashboard() {
-  const stats = [
-    { label: 'Total Sales', value: '$45,231', change: '+12.5%', icon: DollarSign, color: 'bg-blue-500' },
-    { label: 'Orders', value: '1,234', change: '+8.2%', icon: ShoppingBag, color: 'bg-orange-500' },
-    { label: 'Customers', value: '856', change: '+15.3%', icon: Users, color: 'bg-green-500' },
-    { label: 'Growth', value: '23%', change: '+5.1%', icon: TrendingUp, color: 'bg-purple-500' }
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<any>({ totalProducts: 0, totalUsers: 0, totalReviews: 0, topProducts: [], monthly: [] });
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let canceled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get('/api/admin/stats', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (canceled) return;
+        setStats(res.data);
+      } catch (e: any) {
+        console.error('Failed to load admin stats', e);
+        setError(e.response?.data?.error || e.message || 'Failed to load stats');
+      } finally {
+        if (!canceled) setLoading(false);
+      }
+    };
+    load();
+    return () => { canceled = true; };
+  }, [token]);
+
+  if (loading) return <AdminLayout><div className="p-6">Loading dashboard...</div></AdminLayout>;
+  if (error) return <AdminLayout><div className="p-6 text-red-600">{error}</div></AdminLayout>;
+
+  const statItems = [
+    { label: 'Total Products', value: stats.totalProducts, icon: DollarSign, color: 'bg-blue-500' },
+    { label: 'Reviews', value: stats.totalReviews, icon: ShoppingBag, color: 'bg-orange-500' },
+    { label: 'Customers', value: stats.totalUsers, icon: Users, color: 'bg-green-500' },
+    { label: 'Growth', value: '—', icon: TrendingUp, color: 'bg-purple-500' }
   ];
 
-  const salesData = [
-    { month: 'Jan', sales: 4000, orders: 240 },
-    { month: 'Feb', sales: 3000, orders: 180 },
-    { month: 'Mar', sales: 5000, orders: 300 },
-    { month: 'Apr', sales: 4500, orders: 270 },
-    { month: 'May', sales: 6000, orders: 360 },
-    { month: 'Jun', sales: 5500, orders: 330 }
+  const salesData = stats.monthly && stats.monthly.length ? stats.monthly : [
+    { month: 'Jan', sales: 0, orders: 0 },
+    { month: 'Feb', sales: 0, orders: 0 },
+    { month: 'Mar', sales: 0, orders: 0 },
+    { month: 'Apr', sales: 0, orders: 0 },
+    { month: 'May', sales: 0, orders: 0 },
+    { month: 'Jun', sales: 0, orders: 0 }
   ];
 
-  const topProducts = [
-    { name: 'PlayStation 5 Console', sales: 450, revenue: '$224,550' },
-    { name: 'Xbox Series X', sales: 320, revenue: '$143,968' },
-    { name: 'Nintendo Switch OLED', sales: 280, revenue: '$97,972' },
-    { name: 'DualSense Controller', sales: 520, revenue: '$36,395' }
-  ];
+  const topProducts = stats.topProducts || [];
 
   return (
     <AdminLayout>
@@ -33,7 +58,7 @@ export default function AdminDashboard() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat, index) => {
+          {statItems.map((stat, index) => {
             const Icon = stat.icon;
             return (
               <div key={index} className="bg-white rounded-lg shadow-lg p-6">
@@ -41,7 +66,6 @@ export default function AdminDashboard() {
                   <div className={`${stat.color} p-3 rounded-lg`}>
                     <Icon size={24} className="text-white" />
                   </div>
-                  <span className="text-green-600 text-sm font-semibold">{stat.change}</span>
                 </div>
                 <p className="text-gray-600 text-sm mb-1">{stat.label}</p>
                 <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
@@ -91,22 +115,18 @@ export default function AdminDashboard() {
               <thead>
                 <tr className="border-b">
                   <th className="text-left py-3 px-4 text-gray-600">Product Name</th>
-                  <th className="text-left py-3 px-4 text-gray-600">Units Sold</th>
-                  <th className="text-left py-3 px-4 text-gray-600">Revenue</th>
-                  <th className="text-left py-3 px-4 text-gray-600">Status</th>
+                  <th className="text-left py-3 px-4 text-gray-600">Rating</th>
+                  <th className="text-left py-3 px-4 text-gray-600">Reviews</th>
+                  <th className="text-left py-3 px-4 text-gray-600">Price</th>
                 </tr>
               </thead>
               <tbody>
-                {topProducts.map((product, index) => (
+                {topProducts.map((product: any, index: number) => (
                   <tr key={index} className="border-b hover:bg-gray-50 transition">
-                    <td className="py-3 px-4 font-medium">{product.name}</td>
-                    <td className="py-3 px-4">{product.sales}</td>
-                    <td className="py-3 px-4 font-semibold text-blue-600">{product.revenue}</td>
-                    <td className="py-3 px-4">
-                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm">
-                        In Stock
-                      </span>
-                    </td>
+                    <td className="py-3 px-4 font-medium">{product.Name ?? product.name}</td>
+                    <td className="py-3 px-4">{product.Rating ?? product.rating ?? 0}</td>
+                    <td className="py-3 px-4">{product.Reviews ?? product.reviews ?? 0}</td>
+                    <td className="py-3 px-4 font-semibold text-blue-600">{product.Price ? `$${Number(product.Price).toFixed(2)}` : '—'}</td>
                   </tr>
                 ))}
               </tbody>

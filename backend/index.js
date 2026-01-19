@@ -247,6 +247,72 @@ app.get('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
   }
 });
 
+// Admin stats endpoint: counts + top products by Reviews
+app.get('/api/admin/stats', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const pool = await getPool();
+    const totalProductsRes = await pool.request().query('SELECT COUNT(*) AS cnt FROM Products');
+    const totalUsersRes = await pool.request().query('SELECT COUNT(*) AS cnt FROM Users');
+    const totalReviewsRes = await pool.request().query('SELECT COUNT(*) AS cnt FROM Feedback');
+
+    const topProductsRes = await pool.request().query(`SELECT TOP (6) Id, Name, Price, ImageUrl, Rating, Reviews FROM Products ORDER BY Reviews DESC`);
+
+    const totalProducts = totalProductsRes.recordset[0].cnt || 0;
+    const totalUsers = totalUsersRes.recordset[0].cnt || 0;
+    const totalReviews = totalReviewsRes.recordset[0].cnt || 0;
+    const topProducts = topProductsRes.recordset || [];
+
+    // For charts, if Orders table doesn't exist we return empty monthly data
+    // Attempt to compute last 6 months sales if Orders/OrderItems tables exist (best-effort)
+    let monthly = [];
+    try {
+      const q = await pool.request().query(`
+        SELECT TOP (6) DATENAME(MONTH, o.CreatedAt) AS month, SUM(oi.Price * oi.Quantity) AS sales, COUNT(DISTINCT o.Id) AS orders
+        FROM Orders o
+        JOIN OrderItems oi ON oi.OrderId = o.Id
+        WHERE o.CreatedAt >= DATEADD(MONTH, -6, GETDATE())
+        GROUP BY DATENAME(MONTH, o.CreatedAt), MONTH(o.CreatedAt)
+        ORDER BY MONTH(o.CreatedAt)
+      `);
+      monthly = q.recordset || [];
+    } catch (e) {
+      // orders not available; fallback to zeros
+      monthly = [
+        { month: 'Jan', sales: 0, orders: 0 },
+        { month: 'Feb', sales: 0, orders: 0 },
+        { month: 'Mar', sales: 0, orders: 0 },
+        { month: 'Apr', sales: 0, orders: 0 },
+        { month: 'May', sales: 0, orders: 0 },
+        { month: 'Jun', sales: 0, orders: 0 }
+      ];
+    }
+
+    res.json({ totalProducts, totalUsers, totalReviews, topProducts, monthly });
+  } catch (err) {
+    console.error('ADMIN STATS ERROR', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Admin orders endpoint (best-effort, returns empty list if Orders table missing)
+app.get('/api/admin/orders', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const pool = await getPool();
+    // Try basic Orders table; adapt as needed for your schema
+    try {
+      const orders = await pool.request().query('SELECT TOP (200) * FROM Orders ORDER BY CreatedAt DESC');
+      return res.json(orders.recordset || []);
+    } catch (e) {
+      // Table missing or different schema
+      console.warn('Orders table unavailable or different schema:', e.message);
+      return res.json([]);
+    }
+  } catch (err) {
+    console.error('ADMIN ORDERS ERROR', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // Search products by name (query param: q)
 // backend/index.js
 app.get('/api/products/search', async (req, res) => {

@@ -1,78 +1,36 @@
 import AdminLayout from './AdminLayout';
 import { UserPlus, Edit, Trash2, Search, Mail, Phone } from 'lucide-react';
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { useAuth } from '../AuthContext';
 
 export default function UsersManagement() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { token } = useAuth();
 
-  const users = [
-    {
-      id: 1,
-      name: 'John Doe',
-      email: 'john.doe@example.com',
-      phone: '+1 234 567 8901',
-      role: 'Customer',
-      orders: 12,
-      spent: 1450.00,
-      joined: '2025-06-15',
-      status: 'Active'
-    },
-    {
-      id: 2,
-      name: 'Jane Smith',
-      email: 'jane.smith@example.com',
-      phone: '+1 234 567 8902',
-      role: 'Customer',
-      orders: 8,
-      spent: 980.50,
-      joined: '2025-08-22',
-      status: 'Active'
-    },
-    {
-      id: 3,
-      name: 'Mike Johnson',
-      email: 'mike.johnson@example.com',
-      phone: '+1 234 567 8903',
-      role: 'Admin',
-      orders: 0,
-      spent: 0,
-      joined: '2024-01-10',
-      status: 'Active'
-    },
-    {
-      id: 4,
-      name: 'Sarah Williams',
-      email: 'sarah.w@example.com',
-      phone: '+1 234 567 8904',
-      role: 'Customer',
-      orders: 25,
-      spent: 3200.75,
-      joined: '2024-11-05',
-      status: 'Active'
-    },
-    {
-      id: 5,
-      name: 'Tom Brown',
-      email: 'tom.brown@example.com',
-      phone: '+1 234 567 8905',
-      role: 'Customer',
-      orders: 5,
-      spent: 450.00,
-      joined: '2025-12-18',
-      status: 'Inactive'
-    },
-    {
-      id: 6,
-      name: 'Emily Davis',
-      email: 'emily.davis@example.com',
-      phone: '+1 234 567 8906',
-      role: 'Customer',
-      orders: 18,
-      spent: 2100.25,
-      joined: '2025-03-30',
-      status: 'Active'
-    }
-  ];
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get('/api/users');
+        if (cancelled) return;
+        setUsers(res.data || []);
+      } catch (e: any) {
+        console.error('Failed to load users', e);
+        setError(e.response?.data?.error || e.message || 'Failed to load users');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [token]);
+
+
 
   return (
     <AdminLayout>
@@ -128,47 +86,46 @@ export default function UsersManagement() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
-                  <tr key={user.id} className="border-b hover:bg-gray-50 transition">
+                {loading && <tr><td colSpan={8} className="py-6 px-4 text-center">Loading users...</td></tr>}
+                {!loading && users.map((user: any) => (
+                  <tr key={user.Id ?? user.id} className="border-b hover:bg-gray-50 transition">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
-                          {user.name.split(' ').map(n => n[0]).join('')}
+                          {(user.Name || user.name || 'U').split(' ').map((n:any) => n[0]).join('')}
                         </div>
-                        <span className="font-medium">{user.name}</span>
+                        <span className="font-medium">{user.Name ?? user.name}</span>
                       </div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <Mail size={14} />
-                          <span>{user.email}</span>
+                          <span>{user.Email ?? user.email}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
                           <Phone size={14} />
-                          <span>{user.phone}</span>
+                          <span>{(user.Phone ?? user.phone) || '—'}</span>
                         </div>
                       </div>
                     </td>
                     <td className="py-3 px-4">
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        user.role === 'Admin' 
+                        (user.Role === 'Admin' || user.role === 'Admin') 
                           ? 'bg-purple-100 text-purple-700' 
                           : 'bg-blue-100 text-blue-700'
                       }`}>
-                        {user.role}
+                        {user.Role ?? user.role ?? 'Customer'}
                       </span>
                     </td>
-                    <td className="py-3 px-4">{user.orders}</td>
-                    <td className="py-3 px-4 font-semibold text-green-600">${user.spent.toFixed(2)}</td>
-                    <td className="py-3 px-4 text-gray-600">{user.joined}</td>
+                    <td className="py-3 px-4">—</td>
+                    <td className="py-3 px-4 font-semibold text-green-600">—</td>
+                    <td className="py-3 px-4 text-gray-600">—</td>
                     <td className="py-3 px-4">
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        user.status === 'Active' 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-gray-100 text-gray-700'
+                        'bg-green-100 text-green-700'
                       }`}>
-                        {user.status}
+                        Active
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -183,6 +140,7 @@ export default function UsersManagement() {
                     </td>
                   </tr>
                 ))}
+                {!loading && !users.length && <tr><td colSpan={8} className="py-6 px-4 text-center">No users found.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -192,19 +150,19 @@ export default function UsersManagement() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
           <div className="bg-white rounded-lg shadow-lg p-6">
             <p className="text-gray-600 text-sm mb-1">Total Users</p>
-            <p className="text-2xl font-bold text-gray-800">856</p>
+            <p className="text-2xl font-bold text-gray-800">{users.length}</p>
           </div>
           <div className="bg-white rounded-lg shadow-lg p-6">
             <p className="text-gray-600 text-sm mb-1">Active Users</p>
-            <p className="text-2xl font-bold text-green-600">732</p>
+            <p className="text-2xl font-bold text-green-600">{users.length}</p>
           </div>
           <div className="bg-white rounded-lg shadow-lg p-6">
             <p className="text-gray-600 text-sm mb-1">New This Month</p>
-            <p className="text-2xl font-bold text-blue-600">45</p>
+            <p className="text-2xl font-bold text-blue-600">0</p>
           </div>
           <div className="bg-white rounded-lg shadow-lg p-6">
             <p className="text-gray-600 text-sm mb-1">Admins</p>
-            <p className="text-2xl font-bold text-purple-600">8</p>
+            <p className="text-2xl font-bold text-purple-600">{users.filter(u=> (u.Role||u.role) === 'Admin').length}</p>
           </div>
         </div>
       </div>

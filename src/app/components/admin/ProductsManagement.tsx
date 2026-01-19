@@ -9,7 +9,7 @@ export default function ProductsManagement() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +46,55 @@ export default function ProductsManagement() {
     const name = (p.Name ?? p.name ?? '').toString().toLowerCase();
     return !searchTerm.trim() || name.includes(searchTerm.toLowerCase());
   });
+
+  const [editing, setEditing] = useState<any | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+
+  const handleDelete = async (product: any) => {
+    if ((user?.role ?? user?.Role) !== 'admin') {
+      return alert('Only admins can delete products. Please login as an admin.');
+    }
+    if (!confirm(`Delete product "${product.Name ?? product.name}"? This cannot be undone.`)) return;
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.delete(`/api/admin/products/${product.Id ?? product.id}`, { headers });
+      setProducts(prev => prev.filter((p:any) => (p.Id ?? p.id) !== (product.Id ?? product.id)));
+    } catch (e:any) {
+      console.error('Delete failed', e);
+      alert(e.response?.data?.error || e.message || 'Failed to delete product');
+    }
+  };
+
+  const handleEdit = (product: any) => {
+    if ((user?.role ?? user?.Role) !== 'admin') {
+      return alert('Only admins can edit products. Please login as an admin.');
+    }
+    setEditing(product);
+    setEditName(product.Name ?? product.name ?? '');
+    setEditPrice(String(product.Price ?? product.price ?? ''));
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    const id = editing.Id ?? editing.id;
+    const price = parseFloat(editPrice as string);
+    if (isNaN(price)) return alert('Invalid price');
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const body: any = { Name: editName, Price: price };
+      const res = await axios.put(`/api/admin/products/${id}`, body, { headers });
+      setProducts(prev => prev.map((p:any) => ((p.Id ?? p.id) === id ? res.data : p)));
+      setEditing(null);
+    } catch (e:any) {
+      console.error('Save failed', e);
+      alert(e.response?.data?.error || e.message || 'Failed to save product');
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditing(null);
+  };
 
   return (
     <AdminLayout>
@@ -136,12 +185,18 @@ export default function ProductsManagement() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex gap-2">
-                        <button className="p-2 hover:bg-blue-50 rounded-lg transition">
-                          <Edit size={18} className="text-blue-600" />
-                        </button>
-                        <button className="p-2 hover:bg-red-50 rounded-lg transition">
-                          <Trash2 size={18} className="text-red-600" />
-                        </button>
+                        { (user?.role ?? user?.Role) === 'admin' ? (
+                          <>
+                            <button className="p-2 hover:bg-blue-50 rounded-lg transition" onClick={() => handleEdit(product)}>
+                              <Edit size={18} className="text-blue-600" />
+                            </button>
+                            <button className="p-2 hover:bg-red-50 rounded-lg transition" onClick={() => handleDelete(product)}>
+                              <Trash2 size={18} className="text-red-600" />
+                            </button>
+                          </>
+                        ) : (
+                          <div className="text-sm text-gray-400">Admin only</div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -151,6 +206,26 @@ export default function ProductsManagement() {
             </table>
           </div>
         </div>
+        {/* Edit modal */}
+        {editing && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+              <h3 className="text-lg font-semibold mb-4">Edit product</h3>
+              <div className="mb-3">
+                <label className="block text-sm text-gray-600 mb-1">Name</label>
+                <input value={editName} onChange={(e)=>setEditName(e.target.value)} className="w-full border px-3 py-2 rounded" />
+              </div>
+              <div className="mb-3">
+                <label className="block text-sm text-gray-600 mb-1">Price</label>
+                <input value={editPrice} onChange={(e)=>setEditPrice(e.target.value)} className="w-full border px-3 py-2 rounded" />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button className="px-4 py-2 rounded bg-gray-100" onClick={cancelEdit}>Cancel</button>
+                <button className="px-4 py-2 rounded bg-blue-600 text-white" onClick={saveEdit}>Save</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

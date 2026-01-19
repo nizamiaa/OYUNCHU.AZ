@@ -247,6 +247,45 @@ app.get('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
   }
 });
 
+// Admin: update product (partial fields allowed)
+app.put('/api/admin/products/:id', authMiddleware(['admin']), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid product id' });
+  const allowed = ['Name','name','Price','price','OriginalPrice','ImageUrl','Description','Discount','Rating','Reviews','Stock','Category','Status'];
+  const updates = req.body || {};
+  const keys = Object.keys(updates).filter(k => allowed.includes(k));
+  if (!keys.length) return res.status(400).json({ error: 'No valid fields to update' });
+  try {
+    const pool = await getPool();
+    // Build SET clause safely using parameters
+    const sets = keys.map((k, i) => `[${k}] = @v${i}`).join(', ');
+    const reqP = pool.request();
+    keys.forEach((k, i) => reqP.input(`v${i}`, updates[k]));
+    reqP.input('id', id);
+    const q = `UPDATE Products SET ${sets} WHERE Id = @id; SELECT TOP 1 * FROM Products WHERE Id = @id`;
+    const r = await reqP.query(q);
+    res.json(r.recordset && r.recordset[0] ? r.recordset[0] : {});
+  } catch (err) {
+    console.error('Admin update product error', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Admin: delete product
+app.delete('/api/admin/products/:id', authMiddleware(['admin']), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid product id' });
+  try {
+    const pool = await getPool();
+    // Delete product (best-effort). If foreign keys exist, this may fail.
+    await pool.request().input('id', id).query('DELETE FROM Products WHERE Id = @id');
+    res.json({ ok: true, deletedId: id });
+  } catch (err) {
+    console.error('Admin delete product error', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // Admin stats endpoint: counts + top products by Reviews
 app.get('/api/admin/stats', authMiddleware(['admin']), async (req, res) => {
   try {

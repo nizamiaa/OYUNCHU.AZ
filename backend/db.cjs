@@ -22,10 +22,11 @@ if (require.main === module) {
       const pool = await getPool();
       await pool.request().query('SELECT 1 AS test');
       console.log('✅ Database connection successful!');
-      process.exit(0);
+      // when required by other modules (e.g., the API server) we don't want to exit the process;
+      // only exit when this file is executed directly by a developer.
     } catch (err) {
       console.error('❌ Database connection failed:', err);
-      process.exit(1);
+      // don't call process.exit here to avoid terminating callers that require this module
     }
   })();
 }

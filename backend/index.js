@@ -98,8 +98,9 @@ app.get('/api/products/top-discount', async (req, res) => {
 
 
 // Post a review for a product (requires auth)
-app.post('/api/products/:id(\\d+)/reviews', authMiddleware(), async (req, res) => {
+app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
   // Accept optional token: if Authorization header present verify, else proceed as anonymous
+  console.log('[reviews] ENTER', req.method, req.originalUrl, 'auth=', req.headers.authorization, 'body=', req.body);
   const id = parseInt(req.params.id, 10);
   const { rating, text } = req.body;
   if (isNaN(id) || !rating) return res.status(400).json({ error: 'Product id and rating are required' });
@@ -122,6 +123,15 @@ app.post('/api/products/:id(\\d+)/reviews', authMiddleware(), async (req, res) =
       hasUserId = false;
     }
 
+    // Detect which CreatedAt column variant exists (look for any column starting with "Created")
+    let createdCol = 'CreatedAt';
+    try {
+      const cck = await pool.request().input('tbl', 'Feedback').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME LIKE 'Created%'");
+      if ((cck.recordset || []).length) createdCol = cck.recordset[0].COLUMN_NAME;
+    } catch (e) {
+      // keep default
+    }
+
     // check existing feedback by this user for this product
     let existing = null;
     try {
@@ -141,8 +151,11 @@ app.post('/api/products/:id(\\d+)/reviews', authMiddleware(), async (req, res) =
       // update existing feedback (user already reviewed this product)
       try {
         const updReq = pool.request().input('id', existing.Id).input('rating', rating).input('comment', text || '');
-        const upd = await updReq.query(`UPDATE Feedback SET Rating = @rating, Comment = @comment, Created_at = GETDATE(), IsApproved = 1 WHERE Id = @id; SELECT TOP 1 * FROM Feedback WHERE Id = @id`);
+        const updQ = `UPDATE Feedback SET Rating = @rating, Comment = @comment, ${createdCol} = GETDATE(), IsApproved = 1 WHERE Id = @id; SELECT TOP 1 * FROM Feedback WHERE Id = @id`;
+        console.log('[reviews] update query:', updQ, 'params=', { id: existing.Id, rating, comment: text || '' });
+        const upd = await updReq.query(updQ);
         inserted = upd.recordset && upd.recordset.length ? upd.recordset[0] : null;
+        console.log('[reviews] updated feedback:', inserted);
       } catch (ue) {
         console.error('Update feedback failed', ue);
         return res.status(500).json({ error: 'Failed to update feedback', detail: String(ue) });
@@ -150,27 +163,28 @@ app.post('/api/products/:id(\\d+)/reviews', authMiddleware(), async (req, res) =
     } else {
       // insert new feedback (include UserId if column exists)
       try {
+        console.log('[reviews] about to insert feedback', { productId: id, userId: hasUserId ? userId : undefined, userName, rating, comment: text || '', createdCol });
         if (hasUserId) {
+          const insQ = `INSERT INTO Feedback (ProductId, UserId, UserName, Comment, Rating, ${createdCol}, IsApproved) OUTPUT INSERTED.* VALUES (@productId, @userId, @userName, @comment, @rating, GETDATE(), 1)`;
           const ins = await pool.request()
             .input('productId', id)
             .input('userId', userId)
             .input('userName', userName)
             .input('rating', rating)
             .input('comment', text || '')
-            .query(`INSERT INTO Feedback (ProductId, UserId, UserName, Comment, Rating, Created_at, IsApproved)
-                    OUTPUT INSERTED.*
-                    VALUES (@productId, @userId, @userName, @comment, @rating, GETDATE(), 1)`);
+            .query(insQ);
           inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
+          console.log('[reviews] inserted feedback:', inserted);
         } else {
+          const insQ = `INSERT INTO Feedback (ProductId, UserName, Comment, Rating, ${createdCol}, IsApproved) OUTPUT INSERTED.* VALUES (@productId, @userName, @comment, @rating, GETDATE(), 1)`;
           const ins = await pool.request()
             .input('productId', id)
             .input('userName', userName)
             .input('rating', rating)
             .input('comment', text || '')
-            .query(`INSERT INTO Feedback (ProductId, UserName, Comment, Rating, Created_at, IsApproved)
-                    OUTPUT INSERTED.*
-                    VALUES (@productId, @userName, @comment, @rating, GETDATE(), 1)`);
+            .query(insQ);
           inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
+          console.log('[reviews] inserted feedback:', inserted);
         }
       } catch (qerr) {
         console.error('Insert feedback failed:', qerr);
@@ -195,10 +209,11 @@ app.post('/api/products/:id(\\d+)/reviews', authMiddleware(), async (req, res) =
 
     // recompute aggregates (approved only)
     try {
-      const agg = await pool.request().input('id', id).query('SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1');
-      const row = agg.recordset[0] || { AvgRating: null, ReviewCount: 0 };
-      const avg = row.AvgRating !== null ? Number(row.AvgRating) : null;
-      const count = Number(row.ReviewCount || 0);
+    const agg = await pool.request().input('id', id).query('SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1');
+    const row = agg.recordset[0] || { AvgRating: null, ReviewCount: 0 };
+    console.log('[reviews] aggregate row for product', id, row);
+    const avg = row.AvgRating !== null ? Number(row.AvgRating) : null;
+    const count = Number(row.ReviewCount || 0);
 
       // update Products table metrics (best-effort)
       try {
@@ -271,7 +286,7 @@ app.get('/api/products/search', async (req, res) => {
 });
 
 // Get single product with aggregated reviews/rating
-app.get('/api/products/:id(\\d+)', async (req, res) => {
+app.get('/api/products/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid product id' });
   try {
@@ -302,10 +317,17 @@ app.get('/api/products/:id(\\d+)', async (req, res) => {
       const avg = row.AvgRating !== null ? Number(row.AvgRating) : (product.Rating ?? 0);
       const count = Number(row.ReviewCount || product.Reviews || 0);
 
-      // fetch recent approved feedback (map DB Created_at to CreatedAt)
+      // fetch recent approved feedback (map DB created column to CreatedAt)
       let reviewsList = [];
       try {
-        const revRes = await pool.request().input('id', id).query(`SELECT TOP (20) Id, ProductId, UserName, Comment, Rating, Created_at AS CreatedAt, IsApproved FROM Feedback WHERE ProductId = @id AND IsApproved = 1 ORDER BY Created_at DESC`);
+        // detect created column (handle CreatedAt or Created_at)
+        let createdColForRead = 'CreatedAt';
+        try {
+          const cck2 = await pool.request().input('tbl','Feedback').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME LIKE 'Created%'");
+          if ((cck2.recordset || []).length) createdColForRead = cck2.recordset[0].COLUMN_NAME;
+        } catch (e) {}
+
+        const revRes = await pool.request().input('id', id).query(`SELECT TOP (20) Id, ProductId, UserName, Comment, Rating, ${createdColForRead} AS CreatedAt, IsApproved FROM Feedback WHERE ProductId = @id AND IsApproved = 1 ORDER BY ${createdColForRead} DESC`);
         reviewsList = revRes.recordset || [];
       } catch (re) {
         console.warn('Failed to read Feedback list:', re);

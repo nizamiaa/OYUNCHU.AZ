@@ -8,6 +8,7 @@ import RegisterPage from './components/RegisterPage';
 import Header from "./components/Header";
 import HomePage from "./components/HomePage";
 import AllProductsPage from "./components/AllProductsPage";
+import CampaignsPage from './components/CampaignsPage';
 import CartPage from "./components/CartPage";
 import WishlistPage from './components/WishlistPage';
 import ProductDetail from './components/ProductDetail';
@@ -28,6 +29,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/products" element={<AllProductsPage />} />
+            <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/products/:id" element={<ProductDetail />} />
             <Route path="/checkout/cart" element={<CartPage />} />
             <Route path="/login" element={<LoginPage />} />

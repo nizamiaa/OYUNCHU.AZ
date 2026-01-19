@@ -123,7 +123,7 @@ export default function Header() {
           <Link to="/" className="text-2xl font-bold">Oyunchu</Link>
 
           <div className="flex gap-6">
-            <button className="hover:text-orange-400 transition">Campaigns</button>
+            <Link to="/campaigns" className="hover:text-orange-400 transition">Campaigns</Link>
             <button className="hover:text-orange-400 transition">Affiliates</button>
           </div>
 

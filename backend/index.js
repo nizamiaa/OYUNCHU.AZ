@@ -247,6 +247,43 @@ app.get('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
   }
 });
 
+// Admin: create product
+app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
+  const allowed = ['Name','name','Price','price','OriginalPrice','ImageUrl','Description','Discount','Rating','Reviews','Stock','Category','Status'];
+  const body = req.body || {};
+  // normalize image property casing and ensure non-null ImageUrl to satisfy DB NOT NULL constraint
+  if (!body.ImageUrl && body.imageUrl) body.ImageUrl = body.imageUrl;
+  if (!body.ImageUrl) body.ImageUrl = '/images/placeholder.png';
+  // compute Discount automatically: percent off from OriginalPrice
+  try {
+    const priceNum = Number(body.Price ?? body.price);
+    const originalNum = Number(body.OriginalPrice ?? body.originalPrice);
+    if (Number.isFinite(priceNum) && Number.isFinite(originalNum) && originalNum > 0 && priceNum < originalNum) {
+      body.Discount = Math.round(((originalNum - priceNum) / originalNum) * 100);
+    } else {
+      body.Discount = 0;
+    }
+  } catch (e) {
+    body.Discount = 0;
+  }
+  const keys = Object.keys(body).filter(k => allowed.includes(k));
+  if (!keys.length) return res.status(400).json({ error: 'No valid fields to create' });
+  try {
+    const pool = await getPool();
+    // Build INSERT with parameters
+    const cols = keys.map(k => `[${k}]`).join(', ');
+    const vals = keys.map((k, i) => `@v${i}`).join(', ');
+    const reqP = pool.request();
+    keys.forEach((k, i) => reqP.input(`v${i}`, body[k]));
+    const q = `INSERT INTO Products (${cols}) OUTPUT INSERTED.* VALUES (${vals})`;
+    const r = await reqP.query(q);
+    res.json(r.recordset && r.recordset[0] ? r.recordset[0] : {});
+  } catch (err) {
+    console.error('Admin create product error', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // Admin: update product (partial fields allowed)
 app.put('/api/admin/products/:id', authMiddleware(['admin']), async (req, res) => {
   const id = parseInt(req.params.id, 10);
@@ -257,12 +294,30 @@ app.put('/api/admin/products/:id', authMiddleware(['admin']), async (req, res) =
   if (!keys.length) return res.status(400).json({ error: 'No valid fields to update' });
   try {
     const pool = await getPool();
+    // If Price or OriginalPrice changed, compute new Discount (use existing DB values when needed)
+    const priceChanged = keys.some(k => k.toLowerCase() === 'price');
+    const originalChanged = keys.some(k => k.toLowerCase() === 'originalprice');
+    if (priceChanged || originalChanged) {
+      const cur = await pool.request().input('id', id).query('SELECT Price, OriginalPrice FROM Products WHERE Id = @id');
+      if (!cur.recordset.length) return res.status(404).json({ error: 'Product not found' });
+      const current = cur.recordset[0] || {};
+      const newPrice = Number(updates.Price ?? updates.price ?? current.Price);
+      const newOriginal = Number(updates.OriginalPrice ?? updates.originalPrice ?? current.OriginalPrice);
+      let disc = 0;
+      if (Number.isFinite(newPrice) && Number.isFinite(newOriginal) && newOriginal > 0 && newPrice < newOriginal) {
+        disc = Math.round(((newOriginal - newPrice) / newOriginal) * 100);
+      }
+      updates.Discount = disc;
+      if (!keys.includes('Discount')) keys.push('Discount');
+    }
+
     // Build SET clause safely using parameters
     const sets = keys.map((k, i) => `[${k}] = @v${i}`).join(', ');
     const reqP = pool.request();
     keys.forEach((k, i) => reqP.input(`v${i}`, updates[k]));
     reqP.input('id', id);
-    const q = `UPDATE Products SET ${sets} WHERE Id = @id; SELECT TOP 1 * FROM Products WHERE Id = @id`;
+    // always update the updated timestamp when modifying a product
+    const q = `UPDATE Products SET ${sets}, updated_at = GETDATE() WHERE Id = @id; SELECT TOP 1 * FROM Products WHERE Id = @id`;
     const r = await reqP.query(q);
     res.json(r.recordset && r.recordset[0] ? r.recordset[0] : {});
   } catch (err) {

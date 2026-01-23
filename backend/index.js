@@ -33,8 +33,10 @@ const authMiddleware = (roles = []) => (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
 
-    if (roles.length && !roles.includes(decoded.role)) {
-      return res.status(403).json({ error: 'Forbidden' });
+    if (roles.length) {
+      const userRole = String(decoded.role || '').toLowerCase();
+      const allowed = roles.map(r => String(r).toLowerCase());
+      if (!allowed.includes(userRole)) return res.status(403).json({ error: 'Forbidden' });
     }
 
     req.user = decoded; // user info: id + role
@@ -243,6 +245,28 @@ app.get('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
     res.json(result.recordset);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Admin: list recent feedbacks (requires admin)
+app.get('/api/admin/feedbacks', authMiddleware(['admin']), async (req, res) => {
+  try {
+    const pool = await getPool();
+
+    // detect created column name
+    let createdColForRead = 'CreatedAt';
+    try {
+      const cck2 = await pool.request().input('tbl','Feedback').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME LIKE 'Created%'");
+      if ((cck2.recordset || []).length) createdColForRead = cck2.recordset[0].COLUMN_NAME;
+    } catch (e) {}
+
+    // attempt to join Feedback with Products to show product name
+    const q = `SELECT TOP (200) f.Id, f.ProductId, p.Name AS ProductName, f.UserName, f.Comment, f.Rating, f.IsApproved, f.${createdColForRead} AS CreatedAt FROM Feedback f LEFT JOIN Products p ON p.Id = f.ProductId ORDER BY f.${createdColForRead} DESC`;
+    const r = await pool.request().query(q);
+    res.json(r.recordset || []);
+  } catch (err) {
+    console.error('ADMIN FEEDBACKS ERROR', err);
     res.status(500).json({ error: String(err) });
   }
 });
@@ -547,7 +571,8 @@ app.get('/api/consoles', async (req, res) => {
 app.get('/api/users', async (req, res) => {
   try {
     const pool = await getPool();
-    const result = await pool.request().query('SELECT Id, Name, Email FROM Users');
+    // include Created_at and Status so front-end can show join date and active/inactive
+    const result = await pool.request().query('SELECT Id, Name, Email, Role, Status, Created_at FROM Users');
     res.json(result.recordset);
   } catch (err) {
     console.error(err);
@@ -565,11 +590,15 @@ app.post('/api/login', async (req, res) => {
     const pool = await getPool();
     const result = await pool.request()
       .input('email', email)
-      .query('SELECT Id, Name, Email, Password, Role FROM Users WHERE Email = @email');
+      .query('SELECT Id, Name, Email, Password, Role, Status FROM Users WHERE Email = @email');
 
     if (result.recordset.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
 
     const user = result.recordset[0];
+
+    // Check account status first
+    const acctStatus = String(user.Status ?? user.status ?? 'active').toLowerCase();
+    if (acctStatus === 'inactive') return res.status(403).json({ error: 'Sizin hesabiniz block olunub zehmet olmasa magaza ile elaqe saxlayin' });
 
     // Check password
     const valid = await bcrypt.compare(password, user.Password);
@@ -649,6 +678,76 @@ app.post('/api/query', authMiddleware(['admin']), async (req, res) => {
     res.json(result.recordset);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Admin: update user (name, email, role, status)
+app.put('/api/admin/users/:id', authMiddleware(['admin']), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid user id' });
+  const allowed = ['Name','name','Email','email','Role','role','Status','status'];
+  const body = req.body || {};
+  const keys = Object.keys(body).filter(k => allowed.includes(k));
+  if (!keys.length) return res.status(400).json({ error: 'No valid fields to update' });
+  try {
+    const pool = await getPool();
+    const sets = keys.map((k, i) => {
+      const col = (k === 'name') ? 'Name' : (k === 'email') ? 'Email' : (k === 'role') ? 'Role' : (k === 'status') ? 'Status' : k;
+      return `[${col}] = @v${i}`;
+    }).join(', ');
+    const reqP = pool.request();
+    keys.forEach((k, i) => reqP.input(`v${i}`, body[k]));
+    reqP.input('id', id);
+    const q = `UPDATE Users SET ${sets} WHERE Id = @id; SELECT TOP 1 Id, Name, Email, Role, Status, Created_at FROM Users WHERE Id = @id`;
+    const r = await reqP.query(q);
+    res.json(r.recordset && r.recordset[0] ? r.recordset[0] : {});
+  } catch (err) {
+    console.error('Admin update user error', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Admin: delete user
+app.delete('/api/admin/users/:id', authMiddleware(['admin']), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid user id' });
+  try {
+    const pool = await getPool();
+    await pool.request().input('id', id).query('DELETE FROM Users WHERE Id = @id');
+    res.json({ ok: true, deletedId: id });
+  } catch (err) {
+    console.error('Admin delete user error', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Admin: create user (name, email, role, optional password)
+app.post('/api/admin/users', authMiddleware(['admin']), async (req, res) => {
+  const { name, email, role, password } = req.body || {};
+  if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
+  try {
+    const pool = await getPool();
+    // check existing
+    const exists = await pool.request().input('email', email).query('SELECT Id FROM Users WHERE Email = @email');
+    if (exists.recordset.length > 0) return res.status(400).json({ error: 'Email already exists' });
+
+    const plain = password && String(password).trim() ? String(password) : Math.random().toString(36).slice(-8);
+    const hashed = await bcrypt.hash(plain, 10);
+    const userRole = role ? String(role) : 'user';
+    const userStatus = req.body && req.body.status ? String(req.body.status) : 'active';
+    const ins = await pool.request()
+      .input('name', name)
+      .input('email', email)
+      .input('password', hashed)
+      .input('role', userRole)
+      .input('status', userStatus)
+      .query("INSERT INTO Users (Name, Email, Password, Role, Status, Created_at) OUTPUT INSERTED.Id, INSERTED.Name, INSERTED.Email, INSERTED.Role, INSERTED.Status, INSERTED.Created_at VALUES (@name, @email, @password, @role, @status, GETDATE())");
+
+    const created = ins.recordset && ins.recordset[0] ? ins.recordset[0] : null;
+    return res.json({ ok: true, user: created, password: plain });
+  } catch (err) {
+    console.error('Admin create user error', err);
     res.status(500).json({ error: String(err) });
   }
 });

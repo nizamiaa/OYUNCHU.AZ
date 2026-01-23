@@ -44,18 +44,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const login = async (email: string, password: string) => {
-    const res = await axios.post('/api/login', { email, password });
-    if (res.data?.ok) {
-      save(res.data.user, res.data.token);
-      const u = res.data.user;
-      return {
-        id: u.Id ?? u.id,
-        name: u.Name ?? u.name,
-        email: u.Email ?? u.email,
-        role: u.Role ?? u.role,
-      } as User;
-    } else {
+    try {
+      const res = await axios.post('/api/login', { email, password });
+      if (res.data?.ok) {
+        save(res.data.user, res.data.token);
+        const u = res.data.user;
+        return {
+          id: u.Id ?? u.id,
+          name: u.Name ?? u.name,
+          email: u.Email ?? u.email,
+          role: u.Role ?? u.role,
+        } as User;
+      }
       throw new Error(res.data?.error || 'Login failed');
+    } catch (err: any) {
+      // Prefer server-provided error message when present
+      const serverMsg = err?.response?.data?.error;
+      throw new Error(serverMsg || err.message || 'Login failed');
     }
   };
 

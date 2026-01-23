@@ -17,6 +17,7 @@ import AdminDashboard from './components/admin/AdminDashboard';
 import ProductsManagement from './components/admin/ProductsManagement';
 import OrdersManagement from './components/admin/OrdersManagement';
 import UsersManagement from './components/admin/UsersManagement';
+import FeedbacksManagement from './components/admin/FeedbacksManagement';
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/products" element={<ProductsManagement />} />
             <Route path="/admin/orders" element={<OrdersManagement />} />
+            <Route path="/admin/feedbacks" element={<FeedbacksManagement />} />
             <Route path="/admin/users" element={<UsersManagement />} />
             <Route path="/wishlist" element={<WishlistPage />} />
           </Routes>

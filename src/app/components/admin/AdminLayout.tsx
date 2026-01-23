@@ -14,6 +14,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { path: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/admin/products', icon: Package, label: 'Products' },
     { path: '/admin/orders', icon: ShoppingBag, label: 'Orders' },
+    { path: '/admin/feedbacks', icon: ShoppingBag, label: 'Feedbacks' },
     { path: '/admin/users', icon: Users, label: 'Users' }
   ];
 
@@ -28,7 +29,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <Menu size={24} />
           </button>
-          <h1 className="text-2xl font-bold">GameZone Admin</h1>
+          <h1 className="text-2xl font-bold">Oyunchu Admin</h1>
         </div>
         <div className="flex items-center gap-4">
           <Link to="/" className="hover:text-orange-400 transition">

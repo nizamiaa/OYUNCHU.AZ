@@ -124,7 +124,7 @@ export default function Header() {
 
           <div className="flex gap-6">
             <Link to="/campaigns" className="hover:text-orange-400 transition">Campaigns</Link>
-            <button className="hover:text-orange-400 transition">Affiliates</button>
+            <Link to="/branches" className="hover:text-orange-400 transition">Affiliates</Link>
           </div>
 
           <div className="flex items-center gap-4">

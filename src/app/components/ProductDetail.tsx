@@ -34,7 +34,6 @@ export default function ProductDetail(){
   // Reviews persisted in localStorage per product
   const reviewsKey = `reviews_${pid}`;
   const [reviews, setReviews] = useState<Array<{name:string,rating:number,text:string,date:string,adminReply?: string | null, adminReplyAt?: string | null}>>([]);
-  const [hasReviewed, setHasReviewed] = useState(false);
   const [reviewText, setReviewText] = useState('');
   const [reviewRating, setReviewRating] = useState(5);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -105,13 +104,13 @@ export default function ProductDetail(){
               if (adminIdx >= 0) setCurrentReviewIndex(adminIdx);
               // persist merged so local pending reviews remain
               try { localStorage.setItem(reviewsKey, JSON.stringify(merged)); } catch (e) {}
-              if (user && merged.some((m:any) => m.name === user.name)) setHasReviewed(true);
+              // do not block users from submitting multiple reviews; allow duplicates
             } catch (e) {
               setReviews(mapped);
               // focus admin reply if present
               const adminIdx2 = mapped.findIndex((m:any) => m.adminReply);
               if (adminIdx2 >= 0) setCurrentReviewIndex(adminIdx2);
-              if (user && mapped.some((m:any) => m.name === user.name)) setHasReviewed(true);
+              // allow multiple reviews per user — don't mark as reviewed
             }
           }
         } catch (err) {
@@ -162,11 +161,7 @@ export default function ProductDetail(){
   }, [reviewsKey]);
 
   // update hasReviewed when reviews or user change (covers local-storage reviews)
-  useEffect(() => {
-    if (!user) { setHasReviewed(false); return; }
-    const found = (reviews || []).some(r => r.name === user.name);
-    setHasReviewed(Boolean(found));
-  }, [reviews, user]);
+  // do not block users from submitting multiple reviews; keep form available
 
   const avgRating = useMemo(() => {
   const r = reviews || [];
@@ -341,39 +336,33 @@ export default function ProductDetail(){
             </div>
 
             <div className="mt-6">
-              {hasReviewed ? (
-                <div className="p-4 bg-green-50 border rounded text-gray-800">Siz artıq bu məhsula rəy yazmısınız.</div>
-              ) : (
-                <>
-                  <h4 className="font-semibold mb-3">Rəy yaz</h4>
+              <h4 className="font-semibold mb-3">Rəy yaz</h4>
 
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="text-sm">Sizin qiymətiniz:</div>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: 5 }).map((_, i) => {
-                        const val = i + 1;
-                        return (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => setReviewRating(val)}
-                            className="p-1"
-                            aria-label={`Rate ${val}`}
-                          >
-                            <Star size={18} className={val <= reviewRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="text-sm">Sizin qiymətiniz:</div>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: 5 }).map((_, i) => {
+                    const val = i + 1;
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setReviewRating(val)}
+                        className="p-1"
+                        aria-label={`Rate ${val}`}
+                      >
+                        <Star size={18} className={val <= reviewRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-                  <textarea value={reviewText} onChange={(e)=>setReviewText(e.target.value)} className="w-full border rounded p-2" rows={4} placeholder="Rəyinizi yazın... (isteğe bağlı)" />
-                  <div className="flex gap-3 mt-2">
-                    <button onClick={submitReview} className="bg-blue-600 text-white px-4 py-2 rounded">Göndər</button>
-                    <button onClick={()=>{setReviewText(''); setReviewRating(5);}} className="px-4 py-2 border rounded">Təmizlə</button>
-                  </div>
-                </>
-              )}
+              <textarea value={reviewText} onChange={(e)=>setReviewText(e.target.value)} className="w-full border rounded p-2" rows={4} placeholder="Rəyinizi yazın... (isteğe bağlı)" />
+              <div className="flex gap-3 mt-2">
+                <button onClick={submitReview} className="bg-blue-600 text-white px-4 py-2 rounded">Göndər</button>
+                <button onClick={()=>{setReviewText(''); setReviewRating(5);}} className="px-4 py-2 border rounded">Təmizlə</button>
+              </div>
             </div>
 
             <AuthPromptModal open={showAuthModal} variant={'auth'} onClose={() => setShowAuthModal(false)} />

@@ -116,7 +116,7 @@ export default function Header() {
   }, [searchTerm]);
 
   return (
-    <header className="bg-white shadow-md sticky top-0 z-50">
+    <header className="bg-white shadow-md sticky top-0 z-[9999]">
       {/* Top Header */}
       <div className="bg-blue-600 text-white py-2 px-4">
         <div className="container mx-auto flex justify-between items-center">

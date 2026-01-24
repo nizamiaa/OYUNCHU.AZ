@@ -9,7 +9,9 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [surname, setSurname] = useState('');
-  const [phone, setPhone] = useState('');
+  const COUNTRY_PREFIX = '+994';
+  const MAX_LOCAL_DIGITS = 9; // Azerbaijan local number length
+  const [phone, setPhone] = useState(COUNTRY_PREFIX);
   const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
   const [payment, setPayment] = useState('card');
@@ -20,12 +22,17 @@ export default function CheckoutPage() {
     e.preventDefault();
 
     // basic validation
-    if (!name || !phone) {
-      alert('Zəhmət olmasa ad və telefon daxil edin');
+    const localDigits = String(phone || '').replace(/\D/g, '').replace(/^994/, '');
+    if (!name || !localDigits || localDigits.length < 7) {
+      alert('Zəhmət olmasa ad və düzgün telefon nömrəsi daxil edin');
       return;
     }
     if (deliveryMethod === 'pickup' && !selectedBranchId) {
       alert('Zəhmət olmasa filial seçin');
+      return;
+    }
+    if (deliveryMethod === 'courier' && (!city || !String(city).trim())) {
+      alert('Zəhmət olmasa çatdırılma üçün şəhər daxil edin');
       return;
     }
 
@@ -55,6 +62,17 @@ export default function CheckoutPage() {
     }
   };
 
+  // Keep payment default sensible when delivery method changes
+  React.useEffect(() => {
+    if (deliveryMethod === 'pickup') {
+      // prefer in-store payment when picking up
+      setPayment(prev => (prev === 'instore' || prev === 'cart2cart' ? prev : 'instore'));
+    } else {
+      // courier defaults to card
+      setPayment(prev => (prev === 'card' || prev === 'cash' ? prev : 'card'));
+    }
+  }, [deliveryMethod]);
+
   return (
     <div className="p-8 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="col-span-2">
@@ -74,7 +92,16 @@ export default function CheckoutPage() {
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm">Nömrə *</label>
-                <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full border-b py-2 mt-1" placeholder="+994 (##) ###-##-##" />
+                <input value={phone} onChange={e => {
+                  // normalize input: keep only digits after prefix, ensure prefix stays
+                  let v = String(e.target.value || '');
+                  // extract digits
+                  let digits = v.replace(/\D/g, '');
+                  // if user pasted full number starting with 994..., strip leading 994
+                  if (digits.startsWith('994')) digits = digits.replace(/^994/, '');
+                  digits = digits.slice(0, MAX_LOCAL_DIGITS);
+                  setPhone(COUNTRY_PREFIX + digits);
+                }} className="w-full border-b py-2 mt-1" placeholder="+994 (##) ###-##-##" />
               </div>
             </div>
           </div>
@@ -89,12 +116,16 @@ export default function CheckoutPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm">Şəhər *</label>
-                <select value={city} onChange={e => setCity(e.target.value)} className="w-full border-b py-2 mt-1">
-                  <option value="">--Şəhər seç--</option>
-                  <option value="baku">Baku</option>
-                  <option value="sumqayit">Sumqayit</option>
-                  <option value="gence">Gence</option>
-                </select>
+                {deliveryMethod === 'courier' ? (
+                  <input value={city} onChange={e => setCity(e.target.value)} className="w-full border-b py-2 mt-1" placeholder="Şəhər adını daxil edin" />
+                ) : (
+                  <select value={city} onChange={e => setCity(e.target.value)} className="w-full border-b py-2 mt-1">
+                    <option value="">--Şəhər seç--</option>
+                    <option value="baku">Baku</option>
+                    <option value="sumqayit">Sumqayit</option>
+                    <option value="gence">Gence</option>
+                  </select>
+                )}
               </div>
               <div>
                 <label className="text-sm">Ünvan *</label>
@@ -120,15 +151,28 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          <div className="bg-white rounded-lg p-4 border">
+            <div className="bg-white rounded-lg p-4 border">
             <h2 className="font-semibold mb-3">Ödəniş üsulu</h2>
             <div className="grid grid-cols-2 gap-3">
-              <label className={`p-3 border rounded ${payment === 'card' ? 'ring-2 ring-blue-400' : ''}`}>
-                <input type="radio" name="payment" checked={payment === 'card'} onChange={() => setPayment('card')} /> Kartla ödəniş
-              </label>
-              <label className={`p-3 border rounded ${payment === 'cash' ? 'ring-2 ring-blue-400' : ''}`}>
-                <input type="radio" name="payment" checked={payment === 'cash'} onChange={() => setPayment('cash')} /> Qapıda ödəniş
-              </label>
+              {deliveryMethod === 'pickup' ? (
+                <>
+                  <label className={`p-3 border rounded ${payment === 'instore' ? 'ring-2 ring-blue-400' : ''}`}>
+                    <input type="radio" name="payment" checked={payment === 'instore'} onChange={() => setPayment('instore')} /> Mağazada ödəniş
+                  </label>
+                  <label className={`p-3 border rounded ${payment === 'cart2cart' ? 'ring-2 ring-blue-400' : ''}`}>
+                    <input type="radio" name="payment" checked={payment === 'cart2cart'} onChange={() => setPayment('cart2cart')} /> Kartdan karta
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className={`p-3 border rounded ${payment === 'card' ? 'ring-2 ring-blue-400' : ''}`}>
+                    <input type="radio" name="payment" checked={payment === 'card'} onChange={() => setPayment('card')} /> Kartla ödəniş
+                  </label>
+                  <label className={`p-3 border rounded ${payment === 'cash' ? 'ring-2 ring-blue-400' : ''}`}>
+                    <input type="radio" name="payment" checked={payment === 'cash'} onChange={() => setPayment('cash')} /> Qapıda ödəniş
+                  </label>
+                </>
+              )}
             </div>
           </div>
 

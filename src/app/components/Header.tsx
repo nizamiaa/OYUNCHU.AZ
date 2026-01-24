@@ -131,7 +131,7 @@ export default function Header() {
             {auth.isAuthenticated && auth.user ? (
               <div className="flex items-center gap-3">
                 <div className="text-sm">Hello, <span className="font-semibold">{auth.user.name}</span></div>
-                <button onClick={() => { auth.logout(); navigate('/'); }} className="flex items-center gap-1 hover:text-orange-400 transition">
+                <button onClick={async () => { await auth.logout(); navigate('/'); }} className="flex items-center gap-1 hover:text-orange-400 transition">
                   <LogOut size={18} />
                 </button>
               </div>

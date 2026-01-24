@@ -6,6 +6,7 @@ import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 
 import Header from "./components/Header";
+import NavigationLoader from './components/NavigationLoader';
 import HomePage from "./components/HomePage";
 import AllProductsPage from "./components/AllProductsPage";
 import CampaignsPage from './components/CampaignsPage';
@@ -28,6 +29,7 @@ export default function App() {
       <CartProvider>
         <WishlistProvider>
         <Router>
+          <NavigationLoader />
           <Routes>
             <Route element={<><Header /><Outlet /></>}>
               <Route path="/" element={<HomePage />} />

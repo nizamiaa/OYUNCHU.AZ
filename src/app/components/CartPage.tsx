@@ -136,7 +136,6 @@ export default function CartPage() {
           </div>
 
           <button onClick={() => navigate('/checkout')} className="w-full bg-pink-600 text-white py-3 rounded-lg">Sifarişi rəsmiləşdir</button>
-          <button className="w-full border rounded-lg py-3">Bir kliklə al</button>
         </div>
       </aside>
     </div>

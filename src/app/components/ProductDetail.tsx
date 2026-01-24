@@ -33,11 +33,24 @@ export default function ProductDetail(){
 
   // Reviews persisted in localStorage per product
   const reviewsKey = `reviews_${pid}`;
-  const [reviews, setReviews] = useState<Array<{name:string,rating:number,text:string,date:string}>>([]);
+  const [reviews, setReviews] = useState<Array<{name:string,rating:number,text:string,date:string,adminReply?: string | null, adminReplyAt?: string | null}>>([]);
   const [hasReviewed, setHasReviewed] = useState(false);
   const [reviewText, setReviewText] = useState('');
   const [reviewRating, setReviewRating] = useState(5);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
+
+  useEffect(() => {
+    const len = reviews?.length || 0;
+    if (len <= 1) {
+      setCurrentReviewIndex(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setCurrentReviewIndex(i => (i + 1) % Math.max(1, (reviews || []).length));
+    }, 4000);
+    return () => clearInterval(id);
+  }, [reviews]);
 
   useEffect(() => {
     const load = async () => {
@@ -68,7 +81,14 @@ export default function ProductDetail(){
           setProduct(normalized);
           // if backend returned reviews list, use it
           if (res.data && Array.isArray(res.data.ReviewsList)) {
-            const mapped = res.data.ReviewsList.map((r:any) => ({ name: r.UserName || 'Anonymous', rating: r.Rating || 0, text: r.Comment || '', date: parseDateToLocalISO(r.CreatedAt) }));
+            const mapped = res.data.ReviewsList.map((r:any) => ({
+              name: r.UserName || 'Anonymous',
+              rating: r.Rating || 0,
+              text: r.Comment || '',
+              date: parseDateToLocalISO(r.CreatedAt),
+              adminReply: (r.AdminReply ?? r.AdminReplyText) || null,
+              adminReplyAt: r.AdminReplyAt || r.AdminReplyDate || null,
+            }));
 
             // merge with any locally stored reviews to survive refresh/moderation
             try {
@@ -80,11 +100,17 @@ export default function ProductDetail(){
                 if (!exists) merged.push(loc);
               }
               setReviews(merged);
+              // focus on any review that already has an admin reply so reply is visible
+              const adminIdx = merged.findIndex((m:any) => m.adminReply);
+              if (adminIdx >= 0) setCurrentReviewIndex(adminIdx);
               // persist merged so local pending reviews remain
               try { localStorage.setItem(reviewsKey, JSON.stringify(merged)); } catch (e) {}
               if (user && merged.some((m:any) => m.name === user.name)) setHasReviewed(true);
             } catch (e) {
               setReviews(mapped);
+              // focus admin reply if present
+              const adminIdx2 = mapped.findIndex((m:any) => m.adminReply);
+              if (adminIdx2 >= 0) setCurrentReviewIndex(adminIdx2);
               if (user && mapped.some((m:any) => m.name === user.name)) setHasReviewed(true);
             }
           }
@@ -124,7 +150,12 @@ export default function ProductDetail(){
     if (reviews.length) return;
     try {
       const raw = localStorage.getItem(reviewsKey);
-      if (raw) setReviews(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setReviews(parsed);
+        const adminIdxLocal = (parsed || []).findIndex((m:any) => m.adminReply);
+        if (adminIdxLocal >= 0) setCurrentReviewIndex(adminIdxLocal);
+      }
     } catch (err) {
       console.error('Failed to load reviews', err);
     }
@@ -165,9 +196,12 @@ export default function ProductDetail(){
 
         if (res.data && res.data.ok) {
         const inserted = res.data.review;
-        const newEntry = { name: inserted.UserName || user.name || 'You', rating: inserted.Rating || reviewRating, text: inserted.Comment || reviewText, date: parseDateToLocalISO(inserted.CreatedAt) };
+        const newEntry = { name: inserted.UserName || user.name || 'You', rating: inserted.Rating || reviewRating, text: inserted.Comment || reviewText, date: parseDateToLocalISO(inserted.CreatedAt), adminReply: inserted.AdminReply ?? null, adminReplyAt: inserted.AdminReplyAt ?? null };
         const next = [...reviews, newEntry];
         setReviews(next);
+        // prefer showing any review that already has an admin reply; otherwise show the newly added review
+        const adminIdxNew = next.findIndex((m:any) => m.adminReply);
+        setCurrentReviewIndex(adminIdxNew >= 0 ? adminIdxNew : next.length - 1);
         // persist so it remains after refresh (in case server doesn't immediately return it)
         try { localStorage.setItem(reviewsKey, JSON.stringify(next)); } catch (e) {}
         // update local product aggregate view
@@ -175,18 +209,22 @@ export default function ProductDetail(){
         setReviewText(''); setReviewRating(5);
       } else {
         // fallback: store locally
-        const entry = { name: user?.name ?? 'Guest', rating: reviewRating, text: reviewText, date: new Date().toISOString() };
+        const entry = { name: user?.name ?? 'Guest', rating: reviewRating, text: reviewText, date: new Date().toISOString(), adminReply: null, adminReplyAt: null };
         const next = [...reviews, entry];
         setReviews(next);
+        const adminIdxF = next.findIndex((m:any) => m.adminReply);
+        setCurrentReviewIndex(adminIdxF >= 0 ? adminIdxF : next.length - 1);
         try { localStorage.setItem(reviewsKey, JSON.stringify(next)); } catch (e) {}
         setReviewText(''); setReviewRating(5);
       }
     } catch (err) {
       console.error('Submit review failed', err);
       // fallback to local storage if server fails
-      const entry = { name: user?.name ?? 'Guest', rating: reviewRating, text: reviewText, date: new Date().toISOString() };
+      const entry = { name: user?.name ?? 'Guest', rating: reviewRating, text: reviewText, date: new Date().toISOString(), adminReply: null, adminReplyAt: null };
       const next = [...reviews, entry];
       setReviews(next);
+      const adminIdxErr = next.findIndex((m:any) => m.adminReply);
+      setCurrentReviewIndex(adminIdxErr >= 0 ? adminIdxErr : next.length - 1);
       try { localStorage.setItem(reviewsKey, JSON.stringify(next)); } catch (e) {}
       setReviewText(''); setReviewRating(5);
     }
@@ -274,7 +312,7 @@ export default function ProductDetail(){
 
             <div className="space-y-4">
               {reviews.length === 0 && <div className="text-gray-500">Hələ heç bir rəy yoxdur. Sizin rəyiniz faydalı olacaq.</div>}
-              {reviews.map((r, idx) => (
+              {(reviews.length <= 1 ? reviews : [(reviews || [])[currentReviewIndex]]).map((r, idx) => (
                 <div key={idx} className="border rounded p-3">
                   <div className="flex items-center justify-between">
                       <div className="font-semibold">{maskName(r.name)}</div>
@@ -284,8 +322,22 @@ export default function ProductDetail(){
                     {Array.from({length: r.rating}).map((_,i)=>(<Star key={i} size={14}/>))}
                   </div>
                   <div className="mt-2 text-gray-700">{r.text}</div>
+                  {r.adminReply && (
+                    <div className="mt-3 p-3 bg-gray-50 border-l-4 border-blue-400">
+                      <div className="text-xs text-gray-600">Admin cavabı{r.adminReplyAt ? ` — ${new Date(r.adminReplyAt).toLocaleString()}` : ''}</div>
+                      <div className="text-sm mt-1 text-gray-800">{r.adminReply}</div>
+                    </div>
+                  )}
                 </div>
               ))}
+
+              {reviews.length > 1 && (
+                <div className="flex gap-2 mt-3 justify-center">
+                  {reviews.map((_, i) => (
+                    <button key={i} onClick={() => setCurrentReviewIndex(i)} className={`${i === currentReviewIndex ? 'bg-blue-600' : 'bg-gray-300'} w-3 h-3 rounded-full`} aria-label={`Go to review ${i+1}`} />
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="mt-6">

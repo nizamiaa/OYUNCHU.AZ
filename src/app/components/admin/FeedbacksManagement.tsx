@@ -8,6 +8,8 @@ export default function FeedbacksManagement() {
   const [loading, setLoading] = useState(true);
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [posting, setPosting] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let canceled = false;
@@ -64,7 +66,52 @@ export default function FeedbacksManagement() {
                       <td className="py-2 px-3 font-medium">{f.ProductName ?? `#${f.ProductId}`}</td>
                       <td className="py-2 px-3">{f.UserName || 'Anonymous'}</td>
                       <td className="py-2 px-3">{f.Rating}</td>
-                      <td className="py-2 px-3 max-w-xl break-words">{f.Comment}</td>
+                      <td className="py-2 px-3 max-w-xl break-words">
+                        <div className="mb-2">{f.Comment}</div>
+                        {f.AdminReply && (
+                          <div className="mt-2 p-2 bg-gray-50 border-l-4 border-blue-400">
+                            <div className="text-xs text-gray-600">Admin reply{f.AdminReplyAt ? ` — ${new Date(f.AdminReplyAt).toLocaleString()}` : ''}</div>
+                            <div className="text-sm mt-1">{f.AdminReply}</div>
+                          </div>
+                        )}
+
+                        <div className="mt-2">
+                          <textarea
+                            value={replyDrafts[f.Id] ?? ''}
+                            onChange={(e) => setReplyDrafts(prev => ({ ...prev, [f.Id]: e.target.value }))}
+                            placeholder="Write a reply to this feedback..."
+                            className="w-full border rounded p-2 text-sm"
+                            rows={2}
+                          />
+                          <div className="mt-1">
+                            <button
+                              onClick={async () => {
+                                const txt = (replyDrafts[f.Id] || '').trim();
+                                if (!txt) return;
+                                setPosting(p => ({ ...p, [f.Id]: true }));
+                                try {
+                                  const res = await axios.post(`/api/admin/feedbacks/${f.Id}/reply`, { reply: txt }, { headers: { Authorization: `Bearer ${token}` } });
+                                  const created = res.data && res.data.reply ? res.data.reply : null;
+                                  if (created) {
+                                    setFeedbacks(prev => prev.map(it => it.Id === f.Id ? { ...it, AdminReply: created.ReplyText || txt, AdminReplyAt: created.CreatedAt || new Date().toISOString() } : it));
+                                    setReplyDrafts(prev => ({ ...prev, [f.Id]: '' }));
+                                  }
+                                } catch (err: any) {
+                                  console.error('Failed to post reply', err);
+                                  const serverMsg = err?.response?.data?.error;
+                                  setError(serverMsg ? String(serverMsg) : 'Failed to post reply');
+                                } finally {
+                                  setPosting(p => ({ ...p, [f.Id]: false }));
+                                }
+                              }}
+                              disabled={posting[f.Id]}
+                              className="mt-1 inline-flex items-center px-3 py-1 bg-blue-600 text-white rounded text-sm"
+                            >
+                              {posting[f.Id] ? 'Posting...' : 'Post Reply'}
+                            </button>
+                          </div>
+                        </div>
+                      </td>
                       <td className="py-2 px-3">{f.CreatedAt ? new Date(f.CreatedAt).toLocaleString() : '—'}</td>
                       <td className="py-2 px-3">{f.IsApproved ? 'Yes' : 'No'}</td>
                     </tr>

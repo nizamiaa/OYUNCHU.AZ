@@ -117,12 +117,16 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
     const userName = authUser.name ?? 'Anonymous';
 
     // detect if Feedback table has a UserId column; prefer using UserId for uniqueness
+    // Detect if Feedback table has any UserId-like column (e.g. UserId, User_ID, userid)
     let hasUserId = false;
+    let userIdCol = null;
     try {
-      const colCheck = await pool.request().input('tbl', 'Feedback').input('col', 'UserId').query(`SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME = @col`);
-      hasUserId = (colCheck.recordset || []).length > 0;
+      const colsRes = await pool.request().input('tbl', 'Feedback').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+      const names = (colsRes.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+      const found = names.find(n => /user.*id/i.test(n));
+      if (found) { hasUserId = true; userIdCol = found; }
     } catch (e) {
-      hasUserId = false;
+      hasUserId = false; userIdCol = null;
     }
 
     // Detect which CreatedAt column variant exists (look for any column starting with "Created")
@@ -134,80 +138,38 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
       // keep default
     }
 
-    // check existing feedback by this user for this product
-    let existing = null;
-    try {
-      if (hasUserId) {
-        const q = await pool.request().input('productId', id).input('userId', userId).query('SELECT TOP 1 * FROM Feedback WHERE ProductId = @productId AND UserId = @userId');
-        existing = q.recordset && q.recordset.length ? q.recordset[0] : null;
-      } else {
-        const q = await pool.request().input('productId', id).input('userName', userName).query('SELECT TOP 1 * FROM Feedback WHERE ProductId = @productId AND UserName = @userName');
-        existing = q.recordset && q.recordset.length ? q.recordset[0] : null;
-      }
-    } catch (e) {
-      existing = null;
-    }
-
+    // We will always insert a new feedback row. Previously we attempted to dedupe
+    // and update an existing feedback per user; now we allow multiple reviews per
+    // user for the same product. If a UserId-like column exists, include it on insert.
     let inserted = null;
-    if (existing) {
-      // update existing feedback (user already reviewed this product)
-      try {
-        const updReq = pool.request().input('id', existing.Id).input('rating', rating).input('comment', text || '');
-        const updQ = `UPDATE Feedback SET Rating = @rating, Comment = @comment, ${createdCol} = GETDATE(), IsApproved = 1 WHERE Id = @id; SELECT TOP 1 * FROM Feedback WHERE Id = @id`;
-        console.log('[reviews] update query:', updQ, 'params=', { id: existing.Id, rating, comment: text || '' });
-        const upd = await updReq.query(updQ);
-        inserted = upd.recordset && upd.recordset.length ? upd.recordset[0] : null;
-        console.log('[reviews] updated feedback:', inserted);
-      } catch (ue) {
-        console.error('Update feedback failed', ue);
-        return res.status(500).json({ error: 'Failed to update feedback', detail: String(ue) });
+    try {
+      console.log('[reviews] about to insert feedback', { productId: id, userId: hasUserId ? userId : undefined, userName, rating, comment: text || '', createdCol });
+      if (hasUserId && userIdCol) {
+        const insQ = `INSERT INTO Feedback (ProductId, [${userIdCol}], UserName, Comment, Rating, ${createdCol}, IsApproved) OUTPUT INSERTED.* VALUES (@productId, @userId, @userName, @comment, @rating, GETDATE(), 1)`;
+        const ins = await pool.request()
+          .input('productId', id)
+          .input('userId', userId)
+          .input('userName', userName)
+          .input('rating', rating)
+          .input('comment', text || '')
+          .query(insQ);
+        inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
+        console.log('[reviews] inserted feedback:', inserted);
+      } else {
+        const insQ = `INSERT INTO Feedback (ProductId, UserName, Comment, Rating, ${createdCol}, IsApproved) OUTPUT INSERTED.* VALUES (@productId, @userName, @comment, @rating, GETDATE(), 1)`;
+        const ins = await pool.request()
+          .input('productId', id)
+          .input('userName', userName)
+          .input('rating', rating)
+          .input('comment', text || '')
+          .query(insQ);
+        inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
+        console.log('[reviews] inserted feedback:', inserted);
       }
-    } else {
-      // insert new feedback (include UserId if column exists)
-      try {
-        console.log('[reviews] about to insert feedback', { productId: id, userId: hasUserId ? userId : undefined, userName, rating, comment: text || '', createdCol });
-        if (hasUserId) {
-          const insQ = `INSERT INTO Feedback (ProductId, UserId, UserName, Comment, Rating, ${createdCol}, IsApproved) OUTPUT INSERTED.* VALUES (@productId, @userId, @userName, @comment, @rating, GETDATE(), 1)`;
-          const ins = await pool.request()
-            .input('productId', id)
-            .input('userId', userId)
-            .input('userName', userName)
-            .input('rating', rating)
-            .input('comment', text || '')
-            .query(insQ);
-          inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
-          console.log('[reviews] inserted feedback:', inserted);
-        } else {
-          const insQ = `INSERT INTO Feedback (ProductId, UserName, Comment, Rating, ${createdCol}, IsApproved) OUTPUT INSERTED.* VALUES (@productId, @userName, @comment, @rating, GETDATE(), 1)`;
-          const ins = await pool.request()
-            .input('productId', id)
-            .input('userName', userName)
-            .input('rating', rating)
-            .input('comment', text || '')
-            .query(insQ);
-          inserted = ins.recordset && ins.recordset.length ? ins.recordset[0] : null;
-          console.log('[reviews] inserted feedback:', inserted);
-        }
-      } catch (qerr) {
-        console.error('Insert feedback failed:', qerr);
-        return res.status(500).json({ error: 'Failed to save feedback', detail: String(qerr) });
-      }
+    } catch (qerr) {
+      console.error('Insert feedback failed:', qerr);
+      return res.status(500).json({ error: 'Failed to save feedback', detail: String(qerr) });
     }
-
-    // After insert/update: ensure only a single feedback row exists per (product,user)
-      if (inserted) {
-        try {
-          if (hasUserId) {
-            await pool.request().input('productId', id).input('userId', userId).input('keepId', inserted.Id)
-              .query('DELETE FROM Feedback WHERE ProductId = @productId AND UserId = @userId AND Id <> @keepId');
-          } else {
-            await pool.request().input('productId', id).input('userName', userName).input('keepId', inserted.Id)
-              .query("DELETE FROM Feedback WHERE ProductId = @productId AND UserName = @userName AND Id <> @keepId");
-          }
-        } catch (cleanErr) {
-          console.warn('Failed to cleanup duplicate feedback rows:', cleanErr);
-        }
-      }
 
     // recompute aggregates (approved only)
     try {
@@ -262,7 +224,24 @@ app.get('/api/admin/feedbacks', authMiddleware(['admin']), async (req, res) => {
     } catch (e) {}
 
     // attempt to join Feedback with Products to show product name
-    const q = `SELECT TOP (200) f.Id, f.ProductId, p.Name AS ProductName, f.UserName, f.Comment, f.Rating, f.IsApproved, f.${createdColForRead} AS CreatedAt FROM Feedback f LEFT JOIN Products p ON p.Id = f.ProductId ORDER BY f.${createdColForRead} DESC`;
+    // Prefer latest reply from FeedbackReplies if table exists, otherwise fall back to AdminReply columns on Feedback
+    const q = `
+      SELECT TOP (200)
+        f.Id,
+        f.ProductId,
+        p.Name AS ProductName,
+        f.UserName,
+        f.Comment,
+        f.Rating,
+        f.IsApproved,
+        f.${createdColForRead} AS CreatedAt,
+        f.AdminReply,
+        f.AdminReplyDate AS AdminReplyAt
+      FROM Feedback f
+      LEFT JOIN Products p ON p.Id = f.ProductId
+      ORDER BY f.${createdColForRead} DESC
+      `;
+
     const r = await pool.request().query(q);
     res.json(r.recordset || []);
   } catch (err) {
@@ -270,6 +249,52 @@ app.get('/api/admin/feedbacks', authMiddleware(['admin']), async (req, res) => {
     res.status(500).json({ error: String(err) });
   }
 });
+
+// Admin: add or update a reply to a feedback (creates FeedbackReplies table if missing)
+app.post('/api/admin/feedbacks/:id/reply', authMiddleware(['admin']), async (req, res) => {
+  const fid = parseInt(req.params.id, 10);
+  const { reply } = req.body;
+  if (isNaN(fid)) return res.status(400).json({ error: 'Invalid feedback id' });
+  if (!reply?.trim()) return res.status(400).json({ error: 'Reply text required' });
+
+  try {
+    const pool = await getPool();
+
+    const upd = await pool.request()
+      .input('fid', fid)
+      .input('replyText', reply)
+      .input('adminName', req.user.name)
+      .query(`
+        UPDATE Feedback
+        SET AdminReply = @replyText,
+            AdminReplyName = @adminName,
+            AdminReplyDate = GETDATE()
+        WHERE Id = @fid;
+
+        SELECT Id, AdminReply, AdminReplyName, AdminReplyDate
+        FROM Feedback WHERE Id = @fid
+      `);
+    
+      // Also mirror the reply into the Feedback table's AdminReply columns so public product endpoints see it reliably
+      try {
+        await pool.request()
+          .input('fid', fid)
+          .input('replyText', reply)
+          .input('adminName', req.user.name)
+          .input('replyAt', new Date())
+          .query('UPDATE Feedback SET AdminReply = @replyText, AdminReplyName = @adminName, AdminReplyDate = @replyAt WHERE Id = @fid');
+      } catch (mirrorErr) {
+        console.warn('Failed to mirror reply into Feedback table:', mirrorErr);
+      }
+
+    res.json({ ok: true, reply: upd.recordset[0] });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 
 // Admin: create product
 app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
@@ -511,7 +536,35 @@ app.get('/api/products/:id', async (req, res) => {
           if ((cck2.recordset || []).length) createdColForRead = cck2.recordset[0].COLUMN_NAME;
         } catch (e) {}
 
-        const revRes = await pool.request().input('id', id).query(`SELECT TOP (20) Id, ProductId, UserName, Comment, Rating, ${createdColForRead} AS CreatedAt, IsApproved FROM Feedback WHERE ProductId = @id AND IsApproved = 1 ORDER BY ${createdColForRead} DESC`);
+        // include admin reply if present. Avoid referencing FeedbackReplies if the table doesn't exist.
+        let repliesTableExists = false;
+        try {
+          const tcheck = await pool.request().input('tbl', 'FeedbackReplies').query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @tbl");
+          repliesTableExists = (tcheck.recordset || []).length > 0;
+        } catch (tce) {
+          repliesTableExists = false;
+        }
+
+        let revRes;
+        if (repliesTableExists) {
+          revRes = await pool.request().input('id', id).query(`
+            SELECT TOP (20) f.Id, f.ProductId, f.UserName, f.Comment, f.Rating, f.${createdColForRead} AS CreatedAt, f.IsApproved,
+              COALESCE((SELECT TOP 1 fr.ReplyText FROM FeedbackReplies fr WHERE fr.FeedbackId = f.Id ORDER BY fr.CreatedAt DESC), f.AdminReply) AS AdminReply,
+              COALESCE((SELECT TOP 1 fr.CreatedAt FROM FeedbackReplies fr WHERE fr.FeedbackId = f.Id ORDER BY fr.CreatedAt DESC), f.AdminReplyDate) AS AdminReplyAt
+            FROM Feedback f
+            WHERE f.ProductId = @id AND f.IsApproved = 1
+            ORDER BY f.${createdColForRead} DESC
+          `);
+        } else {
+          revRes = await pool.request().input('id', id).query(`
+            SELECT TOP (20) f.Id, f.ProductId, f.UserName, f.Comment, f.Rating, f.${createdColForRead} AS CreatedAt, f.IsApproved,
+              f.AdminReply AS AdminReply,
+              f.AdminReplyDate AS AdminReplyAt
+            FROM Feedback f
+            WHERE f.ProductId = @id AND f.IsApproved = 1
+            ORDER BY f.${createdColForRead} DESC
+          `);
+        }
         reviewsList = revRes.recordset || [];
       } catch (re) {
         console.warn('Failed to read Feedback list:', re);

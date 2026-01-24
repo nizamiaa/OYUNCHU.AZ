@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
+  const [surname, setSurname] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +15,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
     try {
-      await auth.register(name, email, password);
+      await auth.register(name, surname, email, password);
       // Newly registered users are regular users; redirect to home
       navigate('/');
     } catch (err: any) {
@@ -28,15 +29,26 @@ export default function RegisterPage() {
         <h2 className="text-2xl font-semibold mb-4">Register</h2>
         {error && <div className="text-red-600 mb-3">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="w-full px-3 py-2 border rounded"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium mb-1">Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full px-3 py-2 border rounded"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Surname</label>
+              <input
+                type="text"
+                value={surname}
+                onChange={(e) => setSurname(e.target.value)}
+                className="w-full px-3 py-2 border rounded"
+              />
+            </div>
           </div>
 
           <div>

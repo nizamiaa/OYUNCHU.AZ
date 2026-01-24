@@ -4,6 +4,7 @@ import axios from 'axios';
 type User = {
   id: number;
   name: string;
+  surname?: string | null;
   email: string;
   role?: string;
 };
@@ -12,7 +13,7 @@ type AuthContextType = {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<User>;
-  register: (name: string, email: string, password: string) => Promise<User>;
+  register: (name: string, surname: string, email: string, password: string) => Promise<User>;
   logout: () => void;
   isAuthenticated: boolean;
 };
@@ -34,6 +35,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const normalized = {
       id: u.Id ?? u.id,
       name: u.Name ?? u.name,
+      surname: u.Surname ?? u.LastName ?? u.Last_name ?? null,
       email: u.Email ?? u.email,
       role: u.Role ?? u.role,
     };
@@ -64,14 +66,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const register = async (name: string, email: string, password: string) => {
-    const res = await axios.post('/api/register', { name, email, password });
+  const register = async (name: string, surname: string, email: string, password: string) => {
+    const res = await axios.post('/api/register', { name, surname, email, password });
     if (res.data?.ok) {
       save(res.data.user, res.data.token);
       const u = res.data.user;
       return {
         id: u.Id ?? u.id,
         name: u.Name ?? u.name,
+        surname: u.Surname ?? u.LastName ?? null,
         email: u.Email ?? u.email,
         role: u.Role ?? u.role,
       } as User;

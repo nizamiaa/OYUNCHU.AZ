@@ -641,9 +641,22 @@ app.post('/api/login', async (req, res) => {
 
   try {
     const pool = await getPool();
+    // Detect surname-like column and include it in select if present
+    let surnameColLogin = null;
+    try {
+      const cols = await pool.request().input('tbl', 'Users').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+      const names = (cols.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+      surnameColLogin = names.find(n => /surname|last.?name/i.test(n)) || null;
+    } catch (e) {
+      surnameColLogin = null;
+    }
+
+    const selectCols = ['Id', 'Name', 'Email', 'Password', 'Role', 'Status'];
+    if (surnameColLogin) selectCols.push(`[${surnameColLogin}] AS Surname`);
+
     const result = await pool.request()
       .input('email', email)
-      .query('SELECT Id, Name, Email, Password, Role, Status FROM Users WHERE Email = @email');
+      .query(`SELECT ${selectCols.join(', ')} FROM Users WHERE Email = @email`);
 
     if (result.recordset.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
 
@@ -657,10 +670,13 @@ app.post('/api/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.Password);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-    // JWT token
-    const token = jwt.sign({ id: user.Id, role: user.Role, name: user.Name }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    // JWT token (include display name combining Name + Surname when available)
+    const displayName = user.Surname ? `${user.Name} ${user.Surname}` : user.Name;
+    const token = jwt.sign({ id: user.Id, role: user.Role, name: displayName }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
 
-    res.json({ ok: true, user: { Id: user.Id, Name: user.Name, Email: user.Email, Role: user.Role }, token });
+    const respUser = { Id: user.Id, Name: user.Name, Email: user.Email, Role: user.Role };
+    if (user.Surname) respUser.Surname = user.Surname;
+    res.json({ ok: true, user: respUser, token });
 
   } catch (err) {
     console.error(err);
@@ -669,7 +685,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/register', async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, surname, email, password } = req.body;
   console.log('POST /api/register body:', req.body);
   // stricter validation
   if (!name || !name.toString().trim() || !email || !email.toString().trim() || !password || !password.toString().trim()) {
@@ -700,12 +716,37 @@ app.post('/api/register', async (req, res) => {
     }
 
     // Insert user and return created row
-    const result = await pool.request()
-      .input('name', name)
-      .input('email', email)
-      .input('password', hashed)
-      .input('role', role)
-      .query(`INSERT INTO Users (Name, Email, Password, Role, Created_at) OUTPUT INSERTED.Id, INSERTED.Name, INSERTED.Email, INSERTED.Role VALUES (@name, @email, @password, @role, GETDATE())`);
+    // Detect if Users table has a surname-like column
+    let surnameCol = null;
+    try {
+      const cols = await pool.request().input('tbl', 'Users').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+      const names = (cols.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+      surnameCol = names.find(n => /surname|last.?name/i.test(n)) || null;
+    } catch (e) {
+      surnameCol = null;
+    }
+
+    let result;
+    if (surnameCol) {
+      const colsList = `Name, [${surnameCol}], Email, Password, Role, Created_at`;
+      const vals = `@name, @surname, @email, @password, @role, GETDATE()`;
+      result = await pool.request()
+        .input('name', name)
+        .input('surname', surname || '')
+        .input('email', email)
+        .input('password', hashed)
+        .input('role', role)
+        .query(`INSERT INTO Users (${colsList}) OUTPUT INSERTED.* VALUES (${vals})`);
+    } else {
+      // fallback: store full name in Name column
+      const full = surname ? `${name} ${surname}` : name;
+      result = await pool.request()
+        .input('name', full)
+        .input('email', email)
+        .input('password', hashed)
+        .input('role', role)
+        .query(`INSERT INTO Users (Name, Email, Password, Role, Created_at) OUTPUT INSERTED.* VALUES (@name, @email, @password, @role, GETDATE())`);
+    }
 
     const user = result.recordset[0];
 

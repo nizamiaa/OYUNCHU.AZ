@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from 'react-router-dom';
 import { useCart, CartItem } from "../components/CartContext";
 
 function QtyControls({ qty, onChange }: { qty: number; onChange: (n: number) => void }) {
@@ -23,6 +24,7 @@ function QtyControls({ qty, onChange }: { qty: number; onChange: (n: number) => 
 
 export default function CartPage() {
   const { items, totalPrice, removeFromCart, updateQty } = useCart();
+  const navigate = useNavigate();
   const [selected, setSelected] = useState<number[]>([]);
 
   const allSelected = useMemo(() => items.length > 0 && selected.length === items.length, [items, selected]);
@@ -133,7 +135,7 @@ export default function CartPage() {
             <div className="flex justify-between text-lg font-semibold mt-2"><span>Yekun məbləğ:</span><span>{totalPrice.toFixed(2)} ₼</span></div>
           </div>
 
-          <button className="w-full bg-pink-600 text-white py-3 rounded-lg">Sifarişi rəsmiləşdir</button>
+          <button onClick={() => navigate('/checkout')} className="w-full bg-pink-600 text-white py-3 rounded-lg">Sifarişi rəsmiləşdir</button>
           <button className="w-full border rounded-lg py-3">Bir kliklə al</button>
         </div>
       </aside>

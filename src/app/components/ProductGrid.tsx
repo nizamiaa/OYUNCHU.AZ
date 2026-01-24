@@ -59,27 +59,50 @@ export default function ProductGrid() {
   }, []);
 
   useEffect(() => {
-  if (!scrollRef.current || products.length === 0) return;
+    if (!scrollRef.current || products.length === 0) return;
 
-  const container = scrollRef.current;
-  const scrollAmount = 300; // px
-  const intervalTime = 3000; // 3 saniyə
+    const container = scrollRef.current;
+    const scrollAmount = 300; // px per tick
+    const intervalTime = 3000; // 3 seconds
 
-  const interval = setInterval(() => {
+    // inject a small CSS rule to hide native scrollbar across browsers
+    const styleId = 'hide-scrollbar-style';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.innerHTML = `
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // Duplicate content technique: render items twice and when we've scrolled
+    // past the width of the first set, jump back by that width (no visual jump).
+    const originalWidth = () => container.scrollWidth / 2 || container.scrollWidth;
+
+    let running = true;
+    const interval = setInterval(() => {
+      if (!running) return;
       if (!container) return;
 
-      // sona çatanda başa qayıtsın
-      if (
-        container.scrollLeft + container.clientWidth >=
-        container.scrollWidth - 10
-      ) {
-        container.scrollTo({ left: 0, behavior: 'smooth' });
-      } else {
-        container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-      }
+      // normal smooth scroll
+      container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+
+      // after a small timeout (allow smooth scroll to progress), check bounds
+      setTimeout(() => {
+        const ow = originalWidth();
+        if (ow > 0 && container.scrollLeft >= ow) {
+          // instantly jump back by original width to create seamless loop
+          container.scrollLeft = container.scrollLeft - ow;
+        }
+      }, 300);
     }, intervalTime);
 
-    return () => clearInterval(interval);
+    return () => {
+      running = false;
+      clearInterval(interval);
+    };
   }, [products]);
 
 
@@ -96,10 +119,10 @@ export default function ProductGrid() {
         </Link>
       </div>
 
-      <div ref={scrollRef} className="flex gap-6 overflow-x-auto pb-4 scroll-smooth scrollbar-hide">
-        {products.map((product) => (
+      <div ref={scrollRef} className="flex gap-6 overflow-x-auto pb-4 scroll-smooth hide-scrollbar">
+        {[...products, ...products].map((product, idx) => (
           <Link
-            key={product.id}
+            key={`${product.id}-${idx}`}
             to={`/products/${product.id}`}
             className="min-w-[260px] sm:min-w-[280px] max-w-[280px] bg-white rounded-lg shadow-lg hover:shadow-xl transition overflow-hidden group flex-shrink-0 block"
           >

@@ -16,7 +16,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-const branches = [
+export const branches = [
   {
     id: '28may',
     name: '28 May',

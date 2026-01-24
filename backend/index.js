@@ -3,6 +3,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import sql from 'mssql';
@@ -10,8 +11,13 @@ import sql from 'mssql';
 dotenv.config();
 const require = createRequire(import.meta.url);
 const { getPool } = require('./db.cjs');
-
 const app = express();
+const fs = require('fs');
+const path = require('path');
+
+// Provide __dirname equivalent in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -21,6 +27,12 @@ app.use((req, res, next) => {
     console.log(`[api] ${req.method} ${req.originalUrl} - query:`, req.query);
   } catch (e) {}
   next();
+});
+
+// debug POST endpoint to verify POST handling
+app.post('/api/debug', (req, res) => {
+  console.log('[api] DEBUG POST received', req.method, req.originalUrl);
+  res.json({ ok: true, now: new Date().toISOString() });
 });
 
 const PORT = process.env.PORT || 4000;
@@ -443,16 +455,231 @@ app.get('/api/admin/orders', authMiddleware(['admin']), async (req, res) => {
     const pool = await getPool();
     // Try basic Orders table; adapt as needed for your schema
     try {
-      const orders = await pool.request().query('SELECT TOP (200) * FROM Orders ORDER BY CreatedAt DESC');
-      return res.json(orders.recordset || []);
+      const orders = await pool.request().query(`
+        SELECT TOP (200) o.*, (
+          SELECT COUNT(*) FROM OrderItems oi WHERE oi.OrderId = o.Id
+        ) AS ItemsCount
+        FROM Orders o
+        ORDER BY o.CreatedAt DESC
+      `);
+      let list = orders.recordset || [];
+      // also include any fallback JSON-stored orders
+      try {
+        const storePath = path.join(__dirname, 'orders_store.json');
+        if (fs.existsSync(storePath)) {
+          const raw = fs.readFileSync(storePath, 'utf8');
+          const fileOrders = JSON.parse(raw || '[]');
+          // compute ItemsCount for fallback orders when possible
+          const enrichedFileOrders = (fileOrders || []).map(o => {
+            const items = o.items || o.Items || o.OrderItems || [];
+            return { ...o, ItemsCount: Array.isArray(items) ? items.length : (o.ItemsCount || 0) };
+          });
+          list = list.concat(enrichedFileOrders);
+        }
+      } catch (fe) {
+        console.warn('Failed to read orders_store.json', fe.message);
+      }
+      return res.json(list);
     } catch (e) {
       // Table missing or different schema
       console.warn('Orders table unavailable or different schema:', e.message);
+      // return JSON-stored orders if available
+      try {
+        const storePath = path.join(__dirname, 'orders_store.json');
+        if (fs.existsSync(storePath)) {
+          const raw = fs.readFileSync(storePath, 'utf8');
+          const fileOrders = JSON.parse(raw || '[]');
+          return res.json(fileOrders || []);
+        }
+      } catch (fe) {
+        console.warn('Failed to read orders_store.json', fe.message);
+      }
       return res.json([]);
     }
   } catch (err) {
     console.error('ADMIN ORDERS ERROR', err);
     res.status(500).json({ error: String(err) });
+  }
+});
+
+// Admin: get single order with items (by id)
+app.get('/api/admin/orders/:id', authMiddleware(['admin']), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid order id' });
+  try {
+    const pool = await getPool();
+    try {
+      // Select order
+      const ordRes = await pool.request().input('id', id).query('SELECT TOP (1) * FROM Orders WHERE Id = @id');
+      if (ordRes.recordset.length === 0) return res.status(404).json({ error: 'Order not found' });
+      const order = ordRes.recordset[0];
+      // select items
+      let items = [];
+      try {
+        const itRes = await pool.request().input('orderId', id).query('SELECT * FROM OrderItems WHERE OrderId = @orderId');
+        items = itRes.recordset || [];
+      } catch (e) {
+        items = [];
+      }
+
+      // normalize item fields and enrich from Products when snapshot fields missing
+      const normalized = items.map(it => ({
+        raw: it,
+        productId: it.ProductId || it.productId || it.ProductID || null,
+        productName: it.ProductName || it.Product_name || it.name || null,
+        imageUrl: it.ImageUrl || it.Image || it.imageUrl || null,
+        price: (it.Price !== undefined && it.Price !== null) ? Number(it.Price) : (it.price !== undefined ? Number(it.price) : null),
+        qty: (it.Quantity !== undefined && it.Quantity !== null) ? Number(it.Quantity) : (it.qty !== undefined ? Number(it.qty) : 1)
+      }));
+
+      // find which productIds still need lookup
+      const needLookup = Array.from(new Set(normalized.filter(n => (!n.productName || !n.imageUrl) && n.productId).map(n => n.productId)));
+      const prodById = {};
+      if (needLookup.length) {
+        try {
+          const ids = needLookup.map(v => Number(v)).filter(n => Number.isFinite(n));
+          if (ids.length) {
+            const q = `SELECT Id, Name, ImageUrl FROM Products WHERE Id IN (${ids.join(',')})`;
+            const resProds = await pool.request().query(q);
+            (resProds.recordset || []).forEach(p => { prodById[String(p.Id)] = p; });
+          }
+        } catch (pe) {
+          console.warn('Product lookup failed when enriching order detail:', pe.message);
+        }
+      }
+
+      const outItems = normalized.map(n => {
+        const prod = n.productId ? prodById[String(n.productId)] : null;
+        return {
+          id: n.productId || null,
+          name: n.productName || (prod && (prod.Name || prod.name)) || `Product ${n.productId || ''}`,
+          imageUrl: n.imageUrl || (prod && (prod.ImageUrl || prod.imageUrl || prod.Image)) || '/placeholder.png',
+          qty: n.qty || 1,
+          price: n.price || 0
+        };
+      });
+
+      const out = { ...order, items: outItems };
+      return res.json(out);
+    } catch (e) {
+      // Orders table might not exist; fallback to JSON store
+      console.warn('Orders table read failed:', e.message);
+      try {
+        const storePath = path.join(__dirname, 'orders_store.json');
+        if (fs.existsSync(storePath)) {
+          const raw = fs.readFileSync(storePath, 'utf8');
+          const list = JSON.parse(raw || '[]');
+          const found = list.find(o => String(o.id) === String(id) || String(o.Id) === String(id));
+          if (found) return res.json(found);
+        }
+      } catch (fe) {
+        console.warn('Failed to read orders_store.json', fe.message);
+      }
+      return res.status(404).json({ error: 'Order not found' });
+    }
+  } catch (err) {
+    console.error('ADMIN ORDER DETAIL ERROR', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Create order endpoint: tries DB insert, falls back to JSON file storage
+app.post('/api/orders', async (req, res) => {
+  const payload = req.body || {};
+  try {
+    const pool = await getPool();
+    try {
+      // Attempt to insert into Orders and OrderItems according to provided schema
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const subtotal = items.reduce((s, it) => s + ((Number(it.price) || 0) * (Number(it.qty ?? it.quantity) || 1)), 0);
+      const discount = Number(payload.discount ?? payload.Discount ?? 0) || 0;
+      const totalFromPayload = Number(payload.total ?? payload.Total) || 0;
+      const total = totalFromPayload || Math.max(0, subtotal - discount);
+
+      let tx = null;
+      tx = pool.transaction();
+      await tx.begin();
+      const req = tx.request();
+
+      req.input('CustomerName', sql.NVarChar(150), payload.name || payload.CustomerName || null);
+      req.input('Phone', sql.NVarChar(50), payload.phone || payload.Phone || null);
+      req.input('Address', sql.NVarChar(300), payload.address || payload.Address || null);
+      req.input('PaymentMethod', sql.NVarChar(50), payload.payment || payload.PaymentMethod || null);
+      req.input('DeliveryMethod', sql.NVarChar(50), payload.deliveryMethod || payload.DeliveryMethod || null);
+      req.input('Status', sql.NVarChar(50), payload.status || payload.Status || 'Pending');
+      req.input('Subtotal', sql.Decimal(18,2), subtotal || 0);
+      req.input('Discount', sql.Decimal(18,2), discount || 0);
+      req.input('Total', sql.Decimal(18,2), total || 0);
+
+      const insertOrderSql = `INSERT INTO Orders (CustomerName, Phone, Address, PaymentMethod, DeliveryMethod, Status, Subtotal, Discount, Total, CreatedAt) OUTPUT INSERTED.Id VALUES (@CustomerName, @Phone, @Address, @PaymentMethod, @DeliveryMethod, @Status, @Subtotal, @Discount, @Total, GETDATE())`;
+      const inserted = await req.query(insertOrderSql);
+      const orderId = inserted.recordset && inserted.recordset[0] && (inserted.recordset[0].Id || inserted.recordset[0].id || inserted.recordset[0].ID) || null;
+
+      if (orderId && items.length) {
+        // batch fetch product metadata for snapshot (Name, ImageUrl)
+        const prodIds = Array.from(new Set(items.map((it) => it.id || it.productId || it.ProductId).filter(Boolean)));
+        const prodById = {};
+        if (prodIds.length) {
+          try {
+            const ids = prodIds.map(v => Number(v)).filter(n => Number.isFinite(n));
+            if (ids.length) {
+              const q = `SELECT Id, Name, ImageUrl FROM Products WHERE Id IN (${ids.join(',')})`;
+              const resProds = await pool.request().query(q);
+              (resProds.recordset || []).forEach((p) => { prodById[String(p.Id)] = p; });
+            }
+          } catch (pe) {
+            // ignore product lookup failures
+            console.warn('Product lookup failed for order snapshot:', pe.message);
+          }
+        }
+
+        for (const it of items) {
+          const r = tx.request();
+          const pid = it.id || it.productId || it.ProductId || null;
+          const prod = pid ? prodById[String(pid)] : null;
+          const snapshotName = it.name || it.title || (prod && (prod.Name || prod.name)) || null;
+          const snapshotImage = it.imageUrl || it.image || (prod && (prod.ImageUrl || prod.imageUrl || prod.Image)) || null;
+          r.input('OrderId', sql.Int, orderId);
+          r.input('ProductId', sql.Int, pid);
+          r.input('ProductName', sql.NVarChar(200), snapshotName);
+          r.input('ImageUrl', sql.NVarChar(500), snapshotImage);
+          r.input('Price', sql.Decimal(18,2), it.price || 0);
+          r.input('Quantity', sql.Int, it.qty || it.quantity || 1);
+          await r.query('INSERT INTO OrderItems (OrderId, ProductId, ProductName, ImageUrl, Price, Quantity) VALUES (@OrderId, @ProductId, @ProductName, @ImageUrl, @Price, @Quantity)');
+        }
+      }
+
+      await tx.commit();
+      return res.json({ success: true, orderId });
+    } catch (dbErr) {
+      console.warn('DB insert failed, falling back to JSON store:', dbErr.message);
+      try {
+        if (tx) {
+          try { await tx.rollback(); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+      // fallback to file store below
+    }
+  } catch (e) {
+    console.warn('DB unavailable, falling back to JSON store:', e.message);
+  }
+
+  // Fallback: store in backend/orders_store.json
+  try {
+    const storePath = path.join(__dirname, 'orders_store.json');
+    let list = [];
+    if (fs.existsSync(storePath)) {
+      const raw = fs.readFileSync(storePath, 'utf8');
+      list = JSON.parse(raw || '[]');
+    }
+    const id = Date.now();
+    const saved = { id, createdAt: new Date().toISOString(), ...payload };
+    list.unshift(saved);
+    fs.writeFileSync(storePath, JSON.stringify(list, null, 2), 'utf8');
+    return res.json({ success: true, fallbackId: id });
+  } catch (fe) {
+    console.error('Failed to persist order in fallback store:', fe);
+    return res.status(500).json({ error: 'Failed to persist order' });
   }
 });
 

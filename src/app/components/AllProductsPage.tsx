@@ -51,7 +51,7 @@ export default function AllProductsPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const normalized = (data || []).map((p: any) => ({
-          id: p.Id ?? p.id,
+          id: Number(p.Id ?? p.id ?? p.ProductId ?? 0),
           name: p.Name ?? p.name ?? p.Title ?? '',
           price: Number(p.Price ?? p.price ?? p.PriceValue ?? 0) || 0,
           originalPrice: Number(p.OriginalPrice ?? p.originalPrice ?? p.OldPrice ?? 0) || undefined,
@@ -153,15 +153,23 @@ export default function AllProductsPage() {
                   className="absolute top-3 left-3 bg-white p-2 rounded-full shadow-md hover:bg-red-50 transition"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!auth.isAuthenticated) {
-                      setModalOpen(true);
-                      return;
-                    }
+                    try {
+                      console.debug('[wishlist] click', { id: product.id, product });
+                      if (!auth.isAuthenticated) {
+                        setModalOpen(true);
+                        return;
+                      }
 
-                    if (inWishlist(product.id)) {
-                      removeFromWishlist(product.id);
-                    } else {
-                      addToWishlist({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl });
+                      if (inWishlist(product.id)) {
+                        removeFromWishlist(product.id);
+                        console.debug('[wishlist] removed', product.id);
+                      } else {
+                        addToWishlist({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl });
+                        console.debug('[wishlist] added', product.id);
+                      }
+                    } catch (err) {
+                      console.error('Wishlist action failed', err);
+                      try { alert('Wishliste əlavə etmək alınmadı. Konsolda səhvi yoxlayın.'); } catch (e) {}
                     }
                   }}
                 >

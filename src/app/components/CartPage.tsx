@@ -23,11 +23,10 @@ function QtyControls({ qty, onChange }: { qty: number; onChange: (n: number) => 
 }
 
 export default function CartPage() {
-  const { items, totalPrice, removeFromCart, updateQty } = useCart();
+  const { items, totalPrice, removeFromCart, updateQty, selectedIds, toggleSelect, selectAll, clearSelection, selectedItems, selectedTotal } = useCart();
   const navigate = useNavigate();
-  const [selected, setSelected] = useState<number[]>([]);
 
-  const allSelected = useMemo(() => items.length > 0 && selected.length === items.length, [items, selected]);
+  const allSelected = useMemo(() => items.length > 0 && selectedIds.length === items.length, [items, selectedIds]);
 
   const subtotal = useMemo(() => {
     return items.reduce((sum, i) => sum + ((i.oldPrice ?? i.price) * i.qty), 0);
@@ -44,14 +43,11 @@ export default function CartPage() {
     return items.reduce((sum, i) => sum + i.price * i.qty, 0);
   }, [items]);
 
-  const toggleSelect = (id: number) =>
-    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
-
-  const toggleSelectAll = () => (allSelected ? setSelected([]) : setSelected(items.map((i) => i.id)));
+  const toggleSelectAll = () => (allSelected ? clearSelection() : selectAll());
 
   const removeSelected = () => {
-    selected.forEach((id) => removeFromCart(id));
-    setSelected([]);
+    selectedIds.forEach((id) => removeFromCart(id));
+    clearSelection();
   };
 
   if (items.length === 0) {
@@ -67,12 +63,14 @@ export default function CartPage() {
     );
   }
 
+  const displayCount = (selectedItems && selectedItems.length) ? selectedItems.length : items.length;
+
   return (
     <div className="p-8 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="col-span-2">
         <a href="/" className="text-sm text-gray-500 mb-4">Ana səhifə &gt; Səbət</a>
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">Səbət ( Məhsul sayı: {items.length} )</h1>
+          <h1 className="text-2xl font-bold">Səbət ( Məhsul sayı: {displayCount} )</h1>
           <div className="flex gap-3">
             <button onClick={toggleSelectAll} className="px-4 py-2 rounded-md border">Hamısını seç</button>
             <button onClick={removeSelected} className="px-4 py-2 rounded-md border bg-gray-100">Seçilənləri sil</button>
@@ -82,7 +80,7 @@ export default function CartPage() {
         <div className="space-y-4">
           {items.map((item: CartItem) => (
             <div key={item.id} className="bg-white rounded-lg p-4 flex items-center gap-4 border">
-              <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggleSelect(item.id)} className="w-5 h-5" />
+              <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} className="w-5 h-5" />
 
               <img src={item.imageUrl || "/placeholder.png"} alt={item.name} className="w-20 h-20 object-cover rounded" />
 
@@ -114,11 +112,11 @@ export default function CartPage() {
       </div>
 
       <aside className="col-span-1">
-        <div className="bg-white rounded-lg p-6 border space-y-4">
-          <div className="font-semibold">Məhsul sayı: <span className="float-right">{items.length} əd.</span></div>
+          <div className="bg-white rounded-lg p-6 border space-y-4">
+          <div className="font-semibold">Məhsul sayı: <span className="float-right">{displayCount} əd.</span></div>
 
           <div className="text-sm text-gray-600">
-            {items.map((it) => (
+            {selectedItems.map((it) => (
               <div key={it.id} className="flex justify-between py-2 border-b last:border-b-0">
                 <div className="text-sm">{it.name} <span className="text-orange-500">({it.qty}əd)</span></div>
                 <div className="text-right">
@@ -130,9 +128,9 @@ export default function CartPage() {
           </div>
 
           <div className="pt-2 border-t">
-            <div className="flex justify-between text-sm text-gray-600"><span>Ümumi məbləğ:</span><span>{totalPrice.toFixed(2)} ₼</span></div>
+            <div className="flex justify-between text-sm text-gray-600"><span>Ümumi məbləğ:</span><span>{selectedTotal.toFixed(2)} ₼</span></div>
             <div className="flex justify-between text-sm text-gray-600"><span>Endirim məbləği:</span><span className="text-red-600">0.00 ₼</span></div>
-            <div className="flex justify-between text-lg font-semibold mt-2"><span>Yekun məbləğ:</span><span>{totalPrice.toFixed(2)} ₼</span></div>
+            <div className="flex justify-between text-lg font-semibold mt-2"><span>Yekun məbləğ:</span><span>{selectedTotal.toFixed(2)} ₼</span></div>
           </div>
 
           <button onClick={() => navigate('/checkout')} className="w-full bg-pink-600 text-white py-3 rounded-lg">Sifarişi rəsmiləşdir</button>

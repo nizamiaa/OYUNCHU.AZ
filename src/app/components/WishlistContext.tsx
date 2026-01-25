@@ -30,7 +30,7 @@ export const WishlistProvider = ({ children }: { children: React.ReactNode }) =>
       if (raw) {
         const parsed: any[] = JSON.parse(raw);
         const normalized = parsed.map((p) => ({
-          id: p.id ?? p.Id ?? p.ProductId,
+            id: Number(p.id ?? p.Id ?? p.ProductId ?? 0),
           name: p.name ?? p.Name ?? p.Title ?? '',
           price: Number(p.price ?? p.Price ?? 0) || 0,
           imageUrl: p.imageUrl ?? p.ImageUrl ?? p.Image ?? undefined,
@@ -54,7 +54,7 @@ export const WishlistProvider = ({ children }: { children: React.ReactNode }) =>
   const add = (item: WishlistItem) => {
     // normalize incoming item shape
     const it = {
-      id: (item as any).id ?? (item as any).Id ?? (item as any).ProductId,
+      id: Number((item as any).id ?? (item as any).Id ?? (item as any).ProductId ?? 0),
       name: (item as any).name ?? (item as any).Name ?? (item as any).Title ?? '',
       price: Number((item as any).price ?? (item as any).Price ?? 0) || 0,
       imageUrl: (item as any).imageUrl ?? (item as any).ImageUrl ?? (item as any).Image ?? undefined,

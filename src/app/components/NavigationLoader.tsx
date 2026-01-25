@@ -16,7 +16,7 @@ export default function NavigationLoader() {
     setLoading(true);
     const t = setTimeout(() => setLoading(false), 500);
     return () => clearTimeout(t);
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   if (!loading) return null;
 

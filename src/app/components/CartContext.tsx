@@ -14,10 +14,17 @@ type CartContextType = {
   items: CartItem[];
   totalQty: number;
   totalPrice: number;
+  // selection-aware
+  selectedIds: number[];
+  selectedItems: CartItem[];
+  selectedTotal: number;
   updateQty: (id: number, qty: number) => void;
   addToCart: (product: Omit<CartItem, "qty">) => void;
   removeFromCart: (id: number) => void;
   clearCart: () => void;
+  toggleSelect: (id: number) => void;
+  selectAll: () => void;
+  clearSelection: () => void;
 };
 
 
@@ -25,6 +32,7 @@ const CartContext = createContext<CartContextType | null>(null);
 
 export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const { user } = useAuth();
 
@@ -89,12 +97,17 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         return prev.map((i) => (i.id === p.id ? { ...i, qty: i.qty + 1 } : i));
       }
 
+      // when adding, auto-select the item
+      setSelectedIds((s) => (s.includes(Number(p.id)) ? s : [...s, Number(p.id)]));
       return [...prev, { ...p, qty: 1 } as CartItem];
     });
   };
 
   const removeFromCart = (id: number) =>
-    setItems((prev) => prev.filter((i) => i.id !== id));
+    setItems((prev) => {
+      setSelectedIds((s) => s.filter(x => x !== id));
+      return prev.filter((i) => i.id !== id);
+    });
 
   const updateQty = (id: number, qty: number) =>
     setItems((prev) =>
@@ -103,7 +116,12 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         .filter((i) => i.qty > 0)
     );
 
-  const clearCart = () => setItems([]);
+  const clearCart = () => { setItems([]); setSelectedIds([]); };
+  // kept for backward compatibility
+
+  const toggleSelect = (id: number) => setSelectedIds((s) => (s.includes(id) ? s.filter(x => x !== id) : [...s, id]));
+  const selectAll = () => setSelectedIds(items.map(i => i.id));
+  const clearSelection = () => setSelectedIds([]);
 
   const totalQty = useMemo(
     () => items.reduce((sum, i) => sum + i.qty, 0),
@@ -115,16 +133,25 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     [items]
   );
 
+  const selectedItems = useMemo(() => items.filter(i => selectedIds.includes(i.id)), [items, selectedIds]);
+  const selectedTotal = useMemo(() => selectedItems.reduce((s, i) => s + i.price * i.qty, 0), [selectedItems]);
+
   return (
     <CartContext.Provider
       value={{
         items,
         totalQty,
         totalPrice,
+        selectedIds,
+        selectedItems,
+        selectedTotal,
         updateQty,
         addToCart,
         removeFromCart,
         clearCart,
+        toggleSelect,
+        selectAll,
+        clearSelection,
       }}
     >
       {children}

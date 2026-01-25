@@ -5,7 +5,7 @@ import axios from 'axios';
 import { branches } from './BranchesPage';
 
 export default function CheckoutPage() {
-  const { items, totalPrice } = useCart();
+  const { items, totalPrice, selectedItems, selectedTotal } = useCart();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [surname, setSurname] = useState('');
@@ -36,6 +36,12 @@ export default function CheckoutPage() {
       return;
     }
 
+    const itemsToSend = (selectedItems && selectedItems.length) ? selectedItems : items;
+    if (!itemsToSend || itemsToSend.length === 0) {
+      alert('Heç bir məhsul seçilməyib');
+      return;
+    }
+
     const payload = {
       name,
       surname,
@@ -45,8 +51,8 @@ export default function CheckoutPage() {
       payment,
       deliveryMethod,
       branchId: selectedBranchId,
-      total: totalPrice,
-      items: items.map(i => ({ id: i.id, price: i.price, qty: i.qty }))
+      total: (selectedItems && selectedItems.length) ? selectedTotal : totalPrice,
+      items: itemsToSend.map(i => ({ id: i.id, price: i.price, qty: i.qty }))
     };
 
     try {
@@ -184,9 +190,9 @@ export default function CheckoutPage() {
 
       <aside>
         <div className="bg-white rounded-lg p-6 border space-y-4">
-          <div className="font-semibold">Məhsul sayı: <span className="float-right">{items.length} əd.</span></div>
+          <div className="font-semibold">Məhsul sayı: <span className="float-right">{(selectedItems && selectedItems.length) ? selectedItems.length : items.length} əd.</span></div>
           <div className="text-sm text-gray-600">
-            {items.map((it) => (
+            {((selectedItems && selectedItems.length) ? selectedItems : items).map((it) => (
               <div key={it.id} className="flex justify-between py-2 border-b last:border-b-0">
                 <div className="text-sm">{it.name} <span className="text-orange-500">({it.qty}əd)</span></div>
                 <div className="text-right">
@@ -197,9 +203,9 @@ export default function CheckoutPage() {
           </div>
 
           <div className="pt-2 border-t">
-            <div className="flex justify-between text-sm text-gray-600"><span>Ümumi məbləğ:</span><span>{totalPrice.toFixed(2)} ₼</span></div>
+            <div className="flex justify-between text-sm text-gray-600"><span>Ümumi məbləğ:</span><span>{((selectedItems && selectedItems.length) ? selectedTotal : totalPrice).toFixed(2)} ₼</span></div>
             <div className="flex justify-between text-sm text-gray-600"><span>Endirim məbləği:</span><span className="text-red-600">0.00 ₼</span></div>
-            <div className="flex justify-between text-lg font-semibold mt-2"><span>Yekun məbləğ:</span><span>{totalPrice.toFixed(2)} ₼</span></div>
+            <div className="flex justify-between text-lg font-semibold mt-2"><span>Yekun məbləğ:</span><span>{((selectedItems && selectedItems.length) ? selectedTotal : totalPrice).toFixed(2)} ₼</span></div>
           </div>
 
         </div>

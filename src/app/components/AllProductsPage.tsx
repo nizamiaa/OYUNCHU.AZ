@@ -34,8 +34,19 @@ export default function AllProductsPage() {
     const load = async () => {
       try {
         const params = new URLSearchParams(location.search);
-        const sub = params.get('subCategory') || params.get('subcategory');
-        const url = sub ? `/api/products?subCategory=${encodeURIComponent(sub)}` : '/api/products';
+        const rawSub = params.get('subCategory') || params.get('subcategory') || '';
+        const categoryFilter = params.get('category') || params.get('Category') || null;
+
+        // If rawSub contains multiple values (comma or pipe separated), we'll fetch all products
+        // and filter client-side by SubCategory. Otherwise prefer server-side subCategory/category filter.
+        const multiSep = rawSub && (rawSub.includes(',') || rawSub.includes('|'));
+        let url = '/api/products';
+        if (categoryFilter) {
+          url = `/api/products?category=${encodeURIComponent(categoryFilter)}`;
+        } else if (rawSub && !multiSep) {
+          url = `/api/products?subCategory=${encodeURIComponent(rawSub)}`;
+        }
+
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -48,8 +59,21 @@ export default function AllProductsPage() {
           reviews: p.Reviews ?? p.reviews ?? 0,
           imageUrl: p.ImageUrl ?? p.imageUrl ?? p.Image ?? undefined,
           discount: p.Discount ?? p.discount ?? 0,
+          // include category/subcategory for client-side filtering
+          category: p.Category ?? p.category ?? null,
+          subCategory: p.SubCategory ?? p.Sub_Category ?? p.subCategory ?? p.subcategory ?? null,
         }));
-        setProducts(normalized);
+        // If multiple subCategory values were requested, apply client-side filtering
+        if (rawSub && multiSep) {
+          const parts = rawSub.split(/[,|]/).map(s => s.trim()).filter(Boolean).map(s => s.toLowerCase());
+          const filtered = normalized.filter((p:any) => {
+            const sc = (p.subCategory ?? '').toString().toLowerCase();
+            return parts.includes(sc);
+          });
+          setProducts(filtered);
+        } else {
+          setProducts(normalized);
+        }
       } catch (err: any) {
         setError(err.message || 'Failed to load products');
       } finally {
@@ -58,14 +82,37 @@ export default function AllProductsPage() {
     };
 
     load();
-  }, []);
+  }, [location.search]);
 
   if (loading) return <div className="container mx-auto p-6">Loading products...</div>;
   if (error) return <div className="container mx-auto p-6 text-red-600">Error: {error}</div>;
 
+  // Derive page title from query params so header becomes dynamic
+  const paramsForTitle = new URLSearchParams(location.search);
+  const rawSubForTitle = paramsForTitle.get('subCategory') || paramsForTitle.get('subcategory') || '';
+  const categoryParamForTitle = paramsForTitle.get('category') || paramsForTitle.get('Category') || null;
+  let pageTitle = 'All Products';
+  if (categoryParamForTitle) {
+    pageTitle = decodeURIComponent(categoryParamForTitle);
+  } else if (rawSubForTitle) {
+    const decoded = decodeURIComponent(rawSubForTitle);
+    const multi = decoded.includes(',') || decoded.includes('|');
+    if (multi) {
+      const parts = decoded.split(/[,|]/).map(s => s.trim()).filter(Boolean).map(s => s.toLowerCase());
+      // common grouping: PlayStations includes Playstation 3/4/5
+      const hasPS3 = parts.some(p => /playstation\s*3/i.test(p));
+      const hasPS4 = parts.some(p => /playstation\s*4/i.test(p));
+      const hasPS5 = parts.some(p => /playstation\s*5/i.test(p));
+      if (hasPS3 && hasPS4 && hasPS5) pageTitle = 'PlayStations';
+      else pageTitle = parts.map(s => s.replace(/(^|\s)\S/g, t => t.toUpperCase())).join(' / ');
+    } else {
+      pageTitle = decoded;
+    }
+  }
+
   return (
     <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold text-blue-900 mb-6">All Products</h1>
+      <h1 className="text-3xl font-bold text-blue-900 mb-6">{pageTitle}</h1>
 
       {products.length === 0 ? (
         <div className="text-gray-600">No products found.</div>

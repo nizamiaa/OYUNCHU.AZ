@@ -17,6 +17,12 @@ export default function Header() {
     'PS5 Oyun'
   ];
 
+  // Map displayed category names to query parameter key/value when needed
+  const categoryQueryMap: Record<string, { key: string; value: string }> = {
+    // PlayStations should show products whose SubCategory is one of these
+    'PlayStations': { key: 'subCategory', value: 'Playstation 3,Playstation 4,Playstation 5' },
+  };
+
   const [modal, setModal] = useState<{ open: boolean; mode: 'login' | 'register' }>({
     open: false,
     mode: 'login'
@@ -171,7 +177,19 @@ export default function Header() {
                 </button>
                 <div className="border-t my-1" />
                 {categories.map((category, index) => (
-                  <button key={index} type="button" onClick={() => { navigate(`/products?subCategory=${encodeURIComponent(category)}`); setCategoriesVisible(false); }} className="block w-full text-left px-4 py-2 hover:bg-blue-50 hover:text-blue-600 transition">
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => {
+                      const mapped = categoryQueryMap[category];
+                      const url = mapped
+                        ? `/products?${mapped.key}=${encodeURIComponent(mapped.value)}`
+                        : `/products?subCategory=${encodeURIComponent(category)}`;
+                      navigate(url);
+                      setCategoriesVisible(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 hover:bg-blue-50 hover:text-blue-600 transition"
+                  >
                     {category}
                   </button>
                 ))}

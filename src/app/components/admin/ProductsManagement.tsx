@@ -53,12 +53,14 @@ export default function ProductsManagement() {
   const [editOriginalPrice, setEditOriginalPrice] = useState('');
   const [editImage, setEditImage] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  const [editSubCategory, setEditSubCategory] = useState('');
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [newOriginalPrice, setNewOriginalPrice] = useState('');
   const [newAvailable, setNewAvailable] = useState('var');
   const [newImage, setNewImage] = useState('');
+  const [newSubCategory, setNewSubCategory] = useState('');
   const [editAvailable, setEditAvailable] = useState('var');
 
   const handleDelete = async (product: any) => {
@@ -87,6 +89,7 @@ export default function ProductsManagement() {
     setEditAvailable((product.Stock ?? product.stock ?? 0) > 0 ? 'var' : 'yoxdur');
     setEditImage(product.ImageUrl ?? product.imageUrl ?? '');
     setEditCategory(product.Category ?? product.category ?? '');
+    setEditSubCategory(product.SubCategory ?? product.Sub_Category ?? product.subCategory ?? product.subcategory ?? '');
   };
 
   const saveEdit = async () => {
@@ -104,6 +107,7 @@ export default function ProductsManagement() {
       body.Availability = editAvailable;
       if (editImage && editImage.toString().trim()) body.ImageUrl = editImage;
       if (editCategory && editCategory.toString().trim()) body.Category = editCategory;
+      if (editSubCategory && editSubCategory.toString().trim()) body.SubCategory = editSubCategory;
       const res = await axios.put(`/api/admin/products/${id}`, body, { headers });
       setProducts(prev => prev.map((p:any) => ((p.Id ?? p.id) === id ? res.data : p)));
       setEditing(null);
@@ -164,6 +168,7 @@ export default function ProductsManagement() {
                 <tr>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Product</th>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Category</th>
+                  <th className="text-left py-4 px-4 text-gray-600 font-semibold">SubCategory</th>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Price</th>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Availability</th>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Actions</th>
@@ -184,6 +189,7 @@ export default function ProductsManagement() {
                       </div>
                     </td>
                     <td className="py-3 px-4 text-gray-600">{product.Category ?? product.category ?? '—'}</td>
+                    <td className="py-3 px-4 text-gray-600">{product.SubCategory ?? product.Sub_Category ?? product.subCategory ?? product.subcategory ?? '—'}</td>
                     <td className="py-3 px-4 font-semibold text-blue-600">
                       {(() => {
                         const price = parseFloat(product.price);
@@ -191,15 +197,32 @@ export default function ProductsManagement() {
                       })()}
                     </td>
                     <td className="py-3 px-4">
-                      {(() => {
-                        const hasStock = (product.Stock ?? product.stock ?? 0) > 0;
-                        const inStockStatus = product.Status === 'In Stock' || hasStock;
-                        return (
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${inStockStatus ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {inStockStatus ? 'Var' : 'Yoxdur'}
-                          </span>
-                        );
-                      })()}
+                        {(() => {
+                          // Prefer explicit Availability flag if present, then Status or numeric Stock.
+                          const availabilityRaw = product.Availability ?? '';
+                          const availability = availabilityRaw.toString().trim().toLowerCase();
+                          const statusRaw = (product.Status ?? '').toString().trim();
+                          const hasStockNum = (product.Stock ?? product.stock) != null;
+                          const hasStock = Number(product.Stock ?? product.stock ?? 0) > 0;
+
+                          let displayIsVar: boolean;
+                          if (availability) {
+                            displayIsVar = (availability === 'var' || availability === 'available' || availability === 'in stock');
+                          } else if (statusRaw) {
+                            displayIsVar = statusRaw.toLowerCase() === 'in stock';
+                          } else if (hasStockNum) {
+                            displayIsVar = hasStock;
+                          } else {
+                            // No explicit info — default to Var per request
+                            displayIsVar = true;
+                          }
+
+                          return (
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${displayIsVar ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {displayIsVar ? 'Var' : 'Yoxdur'}
+                            </span>
+                          );
+                        })()}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex gap-2">
@@ -260,6 +283,10 @@ export default function ProductsManagement() {
                 </select>
               </div>
               <div className="mb-3">
+                <label className="block text-sm text-gray-600 mb-1">SubCategory</label>
+                <input value={editSubCategory} onChange={(e)=>setEditSubCategory(e.target.value)} className="w-full border px-3 py-2 rounded" />
+              </div>
+              <div className="mb-3">
                 <label className="block text-sm text-gray-600 mb-1">Category</label>
                 <input value={editCategory} onChange={(e)=>setEditCategory(e.target.value)} className="w-full border px-3 py-2 rounded" />
               </div>
@@ -311,6 +338,10 @@ export default function ProductsManagement() {
                 <label className="block text-sm text-gray-600 mb-1">Image</label>
                 <input value={newImage} onChange={(e)=>setNewImage(e.target.value)} className="w-full border px-3 py-2 rounded" />
               </div>
+              <div className="mb-3">
+                <label className="block text-sm text-gray-600 mb-1">SubCategory</label>
+                <input value={newSubCategory} onChange={(e)=>setNewSubCategory(e.target.value)} className="w-full border px-3 py-2 rounded" />
+              </div>
               <div className="flex justify-end gap-2">
                 <button className="px-4 py-2 rounded bg-gray-100" onClick={() => setAdding(false)}>Cancel</button>
                 <button className="px-4 py-2 rounded bg-blue-600 text-white" onClick={async () => {
@@ -324,6 +355,7 @@ export default function ProductsManagement() {
                   // send Status and Availability only (no numeric Stock)
                   body.Status = newAvailable === 'var' ? 'In Stock' : 'Out of Stock';
                   body.Availability = newAvailable;
+                  if (newSubCategory && newSubCategory.toString().trim()) body.SubCategory = newSubCategory;
                   try {
                     const res = await axios.post('/api/admin/products', body, { headers });
                     setProducts(prev => [res.data, ...(prev || [])]);

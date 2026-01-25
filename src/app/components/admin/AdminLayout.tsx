@@ -1,6 +1,7 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Package, ShoppingBag, Users, LogOut, Menu } from 'lucide-react';
 import { useState } from 'react';
+import { useAuth } from '../AuthContext';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -9,6 +10,8 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const navigate = useNavigate();
+  const auth = useAuth();
 
   const menuItems = [
     { path: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
@@ -35,7 +38,17 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <Link to="/" className="hover:text-orange-400 transition">
             View Store
           </Link>
-          <button className="flex items-center gap-2 hover:text-orange-400 transition">
+          <button
+            onClick={async () => {
+              try {
+                await auth.logout();
+              } catch (e) {
+                // ignore
+              }
+              navigate('/');
+            }}
+            className="flex items-center gap-2 hover:text-orange-400 transition"
+          >
             <LogOut size={20} />
             <span>Logout</span>
           </button>

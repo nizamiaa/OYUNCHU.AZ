@@ -16,6 +16,8 @@ type Product = {
   reviews?: number;
   imageUrl?: string;
   discount?: number;
+  category?: string | null;
+  subCategory?: string | null;
 };
 
 export default function AllProductsPage() {
@@ -24,6 +26,20 @@ export default function AllProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
+  const [sortOption, setSortOption] = useState<string>(() => {
+    const p = new URLSearchParams(location.search).get('sort');
+    return p || '';
+  });
+  const [categoriesList, setCategoriesList] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    const p = new URLSearchParams(location.search).get('category');
+    return p || '';
+  });
+  const [minPriceFilter, setMinPriceFilter] = useState<number | null>(null);
+  const [maxPriceFilter, setMaxPriceFilter] = useState<number | null>(null);
+  const [availableMinPrice, setAvailableMinPrice] = useState<number>(0);
+  const [availableMaxPrice, setAvailableMaxPrice] = useState<number>(10000);
   const { addToCart } = useCart();
   const { add: addToWishlist, remove: removeFromWishlist, contains: inWishlist } = useWishlist();
   const auth = useAuth();
@@ -50,7 +66,7 @@ export default function AllProductsPage() {
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const normalized = (data || []).map((p: any) => ({
+        const normalized: Product[] = (data || []).map((p: any) => ({
           id: Number(p.Id ?? p.id ?? p.ProductId ?? 0),
           name: p.Name ?? p.name ?? p.Title ?? '',
           price: Number(p.Price ?? p.price ?? p.PriceValue ?? 0) || 0,
@@ -63,6 +79,26 @@ export default function AllProductsPage() {
           category: p.Category ?? p.category ?? null,
           subCategory: p.SubCategory ?? p.Sub_Category ?? p.subCategory ?? p.subcategory ?? null,
         }));
+        // Special handling for `special=best-sellers`: pick top 3 by price and 5 around median price
+        const specialParam = params.get('special') || null;
+        if (specialParam === 'best-sellers') {
+          const all = normalized.slice();
+          const byDesc = all.slice().sort((a: Product, b: Product) => (b.price || 0) - (a.price || 0));
+          const top3 = byDesc.slice(0, 3);
+
+          const byAsc = all.slice().sort((a: Product, b: Product) => (a.price || 0) - (b.price || 0));
+          const n = byAsc.length;
+          const medianIndex = Math.floor((n - 1) / 2);
+          let start = Math.max(0, medianIndex - 2);
+          if (start + 5 > n) start = Math.max(0, n - 5);
+          let median5 = byAsc.slice(start, start + 5);
+          // avoid duplicates
+          median5 = median5.filter((m: Product) => !top3.some((t: Product) => t.id === m.id));
+
+          const combined = [...top3, ...median5];
+          setProducts(combined);
+          return;
+        }
         // If multiple subCategory values were requested, apply client-side filtering
         if (rawSub && multiSep) {
           const parts = rawSub.split(/[,|]/).map(s => s.trim()).filter(Boolean).map(s => s.toLowerCase());
@@ -74,6 +110,23 @@ export default function AllProductsPage() {
         } else {
           setProducts(normalized);
         }
+        // build dynamic category list from normalized products
+        try {
+          const cats: string[] = Array.from(new Set((normalized || []).map((p: Product) => (p.category || '').toString()).filter(Boolean))).sort();
+          setCategoriesList(cats);
+          const paramsCat = new URLSearchParams(location.search).get('category');
+          if (paramsCat) setSelectedCategory(paramsCat);
+        } catch (e) {}
+        // initialize available price range to 0..10000 (fixed bounds)
+        try {
+          const params = new URLSearchParams(location.search);
+          const minParam = params.get('minPrice');
+          const maxParam = params.get('maxPrice');
+          setAvailableMinPrice(0);
+          setAvailableMaxPrice(10000);
+          setMinPriceFilter(minParam ? Number(minParam) : 0);
+          setMaxPriceFilter(maxParam ? Number(maxParam) : 10000);
+        } catch (e) {}
       } catch (err: any) {
         setError(err.message || 'Failed to load products');
       } finally {
@@ -84,6 +137,54 @@ export default function AllProductsPage() {
     load();
   }, [location.search]);
 
+  // Sync price filters to the URL with debounce so typing immediately filters
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams(location.search);
+      if (minPriceFilter === null) params.delete('minPrice'); else params.set('minPrice', String(minPriceFilter));
+      if (maxPriceFilter === null) params.delete('maxPrice'); else params.set('maxPrice', String(maxPriceFilter));
+      // preserve existing other params
+      navigate(`/products?${params.toString()}`);
+    }, 350);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minPriceFilter, maxPriceFilter]);
+
+  // Load similar items (PS3/PS4) when viewing Playstation 5 subCategory
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const rawSub = params.get('subCategory') || params.get('subcategory') || '';
+    const isPS5 = /playstation\s*5/i.test(rawSub);
+    if (!isPS5) {
+      setSimilarProducts([]);
+      return;
+    }
+
+    (async () => {
+      try {
+        const res = await fetch('/api/products');
+        if (!res.ok) return setSimilarProducts([]);
+        const data = await res.json();
+        const normalized = (data || []).map((p: any) => ({
+          id: Number(p.Id ?? p.id ?? 0),
+          name: p.Name ?? p.name ?? '',
+          price: Number(p.Price ?? p.price ?? 0) || 0,
+          imageUrl: p.ImageUrl ?? p.imageUrl ?? p.Image ?? undefined,
+          subCategory: p.SubCategory ?? p.Sub_Category ?? p.subCategory ?? p.subcategory ?? null,
+        }));
+
+        const sims = normalized.filter((p:any) => {
+          const sc = (p.subCategory || '').toString().toLowerCase();
+          return /playstation\s*3/i.test(sc) || /playstation\s*4/i.test(sc);
+        });
+        setSimilarProducts(sims.slice(0, 6));
+      } catch (e) {
+        setSimilarProducts([]);
+      }
+    })();
+  }, [location.search]);
+
   if (loading) return <div className="container mx-auto p-6">Loading products...</div>;
   if (error) return <div className="container mx-auto p-6 text-red-600">Error: {error}</div>;
 
@@ -92,6 +193,9 @@ export default function AllProductsPage() {
   const rawSubForTitle = paramsForTitle.get('subCategory') || paramsForTitle.get('subcategory') || '';
   const categoryParamForTitle = paramsForTitle.get('category') || paramsForTitle.get('Category') || null;
   let pageTitle = 'All Products';
+  const specialParamForTitle = paramsForTitle.get('special') || null;
+  if (specialParamForTitle === 'best-sellers') pageTitle = 'Best Sellers';
+  
   if (categoryParamForTitle) {
     pageTitle = decodeURIComponent(categoryParamForTitle);
   } else if (rawSubForTitle) {
@@ -114,6 +218,94 @@ export default function AllProductsPage() {
     <div className="container mx-auto p-6">
       <h1 className="text-3xl font-bold text-blue-900 mb-6">{pageTitle}</h1>
 
+      {/* Controls: Sort + Price Range */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-gray-600">Kateqoriya</label>
+          <select
+            value={selectedCategory}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedCategory(v);
+              const params = new URLSearchParams(location.search);
+              if (v) params.set('category', v); else params.delete('category');
+              // clear subCategory when category chosen
+              params.delete('subCategory');
+              navigate(`/products?${params.toString()}`);
+            }}
+            className="border rounded-full px-4 py-2 text-sm"
+          >
+            <option value="">Kateqoriya</option>
+            {categoriesList.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-gray-600">Sırala</label>
+          <select
+            value={sortOption}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSortOption(v);
+              const params = new URLSearchParams(location.search);
+              if (v) params.set('sort', v); else params.delete('sort');
+              navigate(`/products?${params.toString()}`);
+            }}
+            className="border rounded-full px-4 py-2 text-sm"
+          >
+            <option value="" disabled>Sırala</option>
+            <option value="price-asc">Əvvəlcə ucuz</option>
+            <option value="price-desc">Əvvəlcə bahalı</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-600">Qiymət aralığı</div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={minPriceFilter ?? ''}
+              onChange={(e) => {
+                const v = e.target.value === '' ? null : Number(e.target.value);
+                setMinPriceFilter(v);
+              }}
+              min={availableMinPrice}
+              max={availableMaxPrice}
+              className="w-24 border rounded px-2 py-1 text-sm"
+            />
+            <span className="text-sm">—</span>
+            <input
+              type="number"
+              value={maxPriceFilter ?? ''}
+              onChange={(e) => {
+                const v = e.target.value === '' ? null : Number(e.target.value);
+                setMaxPriceFilter(v);
+              }}
+              min={availableMinPrice}
+              max={availableMaxPrice}
+              className="w-24 border rounded px-2 py-1 text-sm"
+            />
+          </div>
+        </div>
+        <div className="flex items-center">
+          <button
+            onClick={() => {
+              setSortOption('');
+              setSelectedCategory('');
+              setMinPriceFilter(null);
+              setMaxPriceFilter(null);
+              // navigate to base products page without query to fully clear filters
+              navigate('/products');
+            }}
+            className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 text-sm"
+          >
+            Filtrləri sıfırla
+          </button>
+        </div>
+      </div>
+
       {products.length === 0 ? (
         <div className="text-gray-600">No products found.</div>
       ) : (
@@ -121,13 +313,25 @@ export default function AllProductsPage() {
           const params = new URLSearchParams(location.search);
           const categoryParam = (params.get('category') || '').toString().trim().toLowerCase();
           const tokens = categoryParam.split(/[^a-z0-9]+/i).filter(Boolean);
-          const displayedProducts = (products || []).filter((p) => {
+          let displayedProducts = (products || []).filter((p) => {
             if (!categoryParam) return true;
             const hay = `${p.name || ''} ${(p as any).category || ''} ${(p as any).description || ''}`.toString().toLowerCase();
             return tokens.length === 0 ? true : tokens.some(t => hay.includes(t));
           });
 
+          // apply price filters if present
+          if (minPriceFilter !== null) displayedProducts = displayedProducts.filter((p) => (p.price || 0) >= (minPriceFilter || 0));
+          if (maxPriceFilter !== null) displayedProducts = displayedProducts.filter((p) => (p.price || 0) <= (maxPriceFilter || Number.MAX_SAFE_INTEGER));
+
+          // apply sorting only when user selected an option
+          if (sortOption === 'price-asc') {
+            displayedProducts = displayedProducts.slice().sort((a: Product, b: Product) => (a.price || 0) - (b.price || 0));
+          } else if (sortOption === 'price-desc') {
+            displayedProducts = displayedProducts.slice().sort((a: Product, b: Product) => (b.price || 0) - (a.price || 0));
+          }
+
           return (
+            <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {displayedProducts.map((product) => (
             <div
@@ -231,6 +435,24 @@ export default function AllProductsPage() {
             </div>
               ))}
             </div>
+            {/* Similar results section */}
+            {similarProducts && similarProducts.length > 0 && (
+              <div className="mt-10">
+                <h2 className="text-2xl font-semibold mb-4">Oxşar nəticələr</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {similarProducts.map(sp => (
+                    <div key={sp.id} className="bg-white rounded-lg shadow-sm p-3 cursor-pointer" onClick={() => navigate(`/products/${sp.id}`)}>
+                      <div className="h-32 flex items-center justify-center mb-2">
+                        <ImageWithFallback src={sp.imageUrl || ''} alt={sp.name} className="max-h-28 object-contain" />
+                      </div>
+                      <div className="text-sm font-medium mb-1">{sp.name}</div>
+                      <div className="text-blue-600 font-semibold">{Number(sp.price).toFixed(2)} ₼</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            </>
           );
         })()
       )}

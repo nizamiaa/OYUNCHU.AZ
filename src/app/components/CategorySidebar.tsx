@@ -1,13 +1,14 @@
 import { Gamepad2, Box, Gamepad, Joystick, TrendingUp, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function CategorySidebar() {
+  const navigate = useNavigate();
   const categories = [
     { name: 'PlayStation 5', icon: Gamepad2, color: 'text-blue-600', bgColor: 'bg-blue-50' },
-    { name: 'Xbox Series X/S', icon: Box, color: 'text-green-600', bgColor: 'bg-green-50' },
-    { name: 'Nintendo Switch', icon: Gamepad, color: 'text-red-600', bgColor: 'bg-red-50' },
-    { name: 'Controllers', icon: Joystick, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+    { name: 'Aksesuarlar', icon: Joystick, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+    { name: 'Konsol', icon: Box, color: 'text-green-600', bgColor: 'bg-green-50' },
+    { name: 'Oyunlar', icon: Gamepad, color: 'text-red-600', bgColor: 'bg-red-50' },
     { name: 'Best Sellers', icon: TrendingUp, color: 'text-orange-600', bgColor: 'bg-orange-50' },
-    { name: 'New Arrivals', icon: Sparkles, color: 'text-pink-600', bgColor: 'bg-pink-50' },
   ];
 
   return (
@@ -19,6 +20,19 @@ export default function CategorySidebar() {
           return (
             <button
               key={index}
+              onClick={() => {
+                  // map display name to query key/value when needed
+                  const mapToQuery = (name: string) => {
+                    if (/playstation/i.test(name) && /5/.test(name)) return { key: 'subCategory', value: 'Playstation 5' };
+                    if (/aksesuar/i.test(name)) return { key: 'category', value: 'Aksesuar' };
+                    if (/konsol/i.test(name)) return { key: 'category', value: 'Konsol' };
+                    if (/oyun/i.test(name) || /oyunlar/i.test(name)) return { key: 'category', value: 'Oyunlar' };
+                    if (/best\s*sellers/i.test(name) || /best/i.test(name) && /seller/i.test(name)) return { key: 'special', value: 'best-sellers' };
+                    return { key: 'subCategory', value: name };
+                  };
+                  const q = mapToQuery(category.name);
+                  navigate(`/products?${q.key}=${encodeURIComponent(q.value)}`);
+                }}
               className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${category.bgColor} hover:shadow-md group`}
             >
               <div className={`${category.color} group-hover:scale-110 transition`}>

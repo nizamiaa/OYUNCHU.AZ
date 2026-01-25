@@ -3,6 +3,7 @@ import { useWishlist } from './WishlistContext';
 import { ShoppingCart, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCart } from './CartContext';
+import { ImageWithFallback } from './figma/ImageWithFallback';
 
 export default function WishlistPage(){
   const { items, remove } = useWishlist();
@@ -28,7 +29,12 @@ export default function WishlistPage(){
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {items.map(i => (
             <div key={i.id} className="bg-white border rounded-lg shadow-sm overflow-hidden">
-              <img src={i.imageUrl || 'https://picsum.photos/seed/wishlist/400/300'} alt={i.name} className="w-full h-48 object-cover" />
+              <ImageWithFallback
+                src={i.imageUrl || 'https://picsum.photos/seed/wishlist/400/300'}
+                alt={i.name}
+                className="w-full h-48 object-cover bg-gray-100"
+                loading="lazy"
+              />
               <div className="p-4">
                 <div className="flex justify-between items-start gap-2">
                   <div>

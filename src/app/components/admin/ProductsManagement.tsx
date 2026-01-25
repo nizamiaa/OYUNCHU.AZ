@@ -42,9 +42,32 @@ export default function ProductsManagement() {
     return () => { cancelled = true; };
   }, [token]);
 
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedAvailability, setSelectedAvailability] = useState('');
+
   const filtered = (products || []).filter((p: any) => {
     const name = (p.Name ?? p.name ?? '').toString().toLowerCase();
-    return !searchTerm.trim() || name.includes(searchTerm.toLowerCase());
+    const matchesSearch = !searchTerm.trim() || name.includes(searchTerm.toLowerCase());
+    const categoryVal = (p.Category ?? p.category ?? '').toString();
+    const matchesCategory = !selectedCategory || selectedCategory === '' || categoryVal === selectedCategory;
+    // derive display availability (Var or Yoxdur) using same logic as table
+    const availabilityRaw = p.Availability ?? '';
+    const availability = availabilityRaw.toString().trim().toLowerCase();
+    const statusRaw = (p.Status ?? '').toString().trim();
+    const hasStockNum = (p.Stock ?? p.stock) != null;
+    const hasStock = Number(p.Stock ?? p.stock ?? 0) > 0;
+    let displayAvail = 'Var';
+    if (availability) {
+      displayAvail = (availability === 'var' || availability === 'available' || availability === 'in stock') ? 'Var' : 'Yoxdur';
+    } else if (statusRaw) {
+      displayAvail = statusRaw.toLowerCase() === 'in stock' ? 'Var' : 'Yoxdur';
+    } else if (hasStockNum) {
+      displayAvail = hasStock ? 'Var' : 'Yoxdur';
+    } else {
+      displayAvail = 'Var';
+    }
+    const matchesAvailability = !selectedAvailability || selectedAvailability === '' || displayAvail === selectedAvailability;
+    return matchesSearch && matchesCategory && matchesAvailability;
   });
 
   const [editing, setEditing] = useState<any | null>(null);
@@ -65,7 +88,7 @@ export default function ProductsManagement() {
 
   const handleDelete = async (product: any) => {
     if ((user?.role) !== 'admin') {
-      return alert('Only admins can delete products. Please login as an admin.');
+      return alert('Only admins can delete products. Please login as an  admin.');
     }
     if (!confirm(`Delete product "${product.Name ?? product.name}"? This cannot be undone.`)) return;
     try {
@@ -145,17 +168,16 @@ export default function ProductsManagement() {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
               />
             </div>
-            <select className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none">
-              <option>All Categories</option>
-              <option>Consoles</option>
-              <option>Controllers</option>
-              <option>Accessories</option>
+            <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none">
+              <option value="">All Categories</option>
+              {Array.from(new Set((products || []).map((p:any) => (p.Category ?? p.category ?? '').toString()).filter(Boolean))).map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
-            <select className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none">
-              <option>All Status</option>
-              <option>In Stock</option>
-              <option>Low Stock</option>
-              <option>Out of Stock</option>
+            <select value={selectedAvailability} onChange={(e) => setSelectedAvailability(e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none">
+              <option value="">Hamısı</option>
+              <option value="Var">Var</option>
+              <option value="Yoxdur">Yoxdur</option>
             </select>
           </div>
         </div>

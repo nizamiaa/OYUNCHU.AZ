@@ -10,12 +10,11 @@ export default function Header() {
   const { totalQty } = useCart();
   const { items: wishlistItems } = useWishlist();
   const categories = [
-    'PlayStation 5',
-    'Xbox Series X/S',
-    'Nintendo Switch',
-    'Controllers',
-    'Games',
-    'Accessories'
+    'PlayStations',
+    'Dualsense',
+    'Nintendo Oyun',
+    'PS4 Oyun',
+    'PS5 Oyun'
   ];
 
   const [modal, setModal] = useState<{ open: boolean; mode: 'login' | 'register' }>({
@@ -28,8 +27,10 @@ export default function Header() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
   const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [categoriesVisible, setCategoriesVisible] = useState(false);
 
   const searchRef = useRef<HTMLDivElement>(null);
+  const categoriesRef = useRef<HTMLDivElement>(null);
 
   // 🔒 Scroll lock when modal open
   useEffect(() => {
@@ -41,6 +42,9 @@ export default function Header() {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setDropdownVisible(false);
+      }
+      if (categoriesRef.current && !categoriesRef.current.contains(event.target as Node)) {
+        setCategoriesVisible(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -154,19 +158,25 @@ export default function Header() {
       <div className="bg-white py-3 px-4 border-b">
         <div className="container mx-auto flex justify-between items-center">
           {/* Categories */}
-          <div className="relative group">
-            <button className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition">
+          <div className="relative" ref={categoriesRef}>
+            <button onClick={() => setCategoriesVisible(v => !v)} className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition">
               <Menu size={20} />
               <span>All Categories</span>
             </button>
 
-            <div className="absolute hidden group-hover:block top-full left-0 mt-1 bg-white shadow-xl rounded-lg w-64 py-2 border">
-              {categories.map((category, index) => (
-                <button key={index} className="block w-full text-left px-4 py-2 hover:bg-blue-50 hover:text-blue-600 transition">
-                  {category}
+            {categoriesVisible && (
+              <div className="absolute top-full left-0 mt-1 bg-white shadow-xl rounded-lg w-64 py-2 border z-50">
+                <button type="button" onClick={() => { navigate('/products'); setCategoriesVisible(false); }} className="block w-full text-left px-4 py-2 font-medium hover:bg-blue-50 hover:text-blue-600 transition">
+                  Butun mehsullar
                 </button>
-              ))}
-            </div>
+                <div className="border-t my-1" />
+                {categories.map((category, index) => (
+                  <button key={index} type="button" onClick={() => { navigate(`/products?subCategory=${encodeURIComponent(category)}`); setCategoriesVisible(false); }} className="block w-full text-left px-4 py-2 hover:bg-blue-50 hover:text-blue-600 transition">
+                    {category}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Search */}

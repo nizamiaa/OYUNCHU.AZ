@@ -160,6 +160,53 @@ export default function ProductDetail(){
     }
   }, [reviewsKey]);
 
+  // Periodically refresh reviews from server so admin replies appear without reload
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const res = await axios.get(`/api/products/${pid}`);
+        if (cancelled) return;
+        if (res.data && Array.isArray(res.data.ReviewsList)) {
+          const mapped = res.data.ReviewsList.map((r:any) => ({
+            name: r.UserName || 'Anonymous',
+            rating: r.Rating || 0,
+            text: r.Comment || '',
+            date: parseDateToLocalISO(r.CreatedAt),
+            adminReply: (r.AdminReply ?? r.AdminReplyText) || null,
+            adminReplyAt: r.AdminReplyAt || r.AdminReplyDate || null,
+          }));
+
+          // merge with local-only reviews stored in localStorage
+          try {
+            const rawLocal = localStorage.getItem(reviewsKey);
+            const localList = rawLocal ? JSON.parse(rawLocal) : [];
+            const merged = [...mapped];
+            for (const loc of (localList || [])) {
+              const exists = merged.some((m:any) => m.name === loc.name && (m.text === loc.text || m.date === loc.date));
+              if (!exists) merged.push(loc);
+            }
+            setReviews(merged);
+            try { localStorage.setItem(reviewsKey, JSON.stringify(merged)); } catch (e) {}
+            const adminIdx = (merged || []).findIndex((m:any) => m.adminReply);
+            if (adminIdx >= 0) setCurrentReviewIndex(adminIdx);
+          } catch (e) {
+            setReviews(mapped);
+            const adminIdx2 = mapped.findIndex((m:any) => m.adminReply);
+            if (adminIdx2 >= 0) setCurrentReviewIndex(adminIdx2);
+          }
+        }
+      } catch (e) {
+        // silent fail - keep existing reviews
+      }
+    };
+
+    // run once immediately then every 15s
+    refresh();
+    const t = setInterval(refresh, 15000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [pid, reviewsKey]);
+
   // update hasReviewed when reviews or user change (covers local-storage reviews)
   // do not block users from submitting multiple reviews; keep form available
 

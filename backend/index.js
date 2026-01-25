@@ -74,6 +74,27 @@ app.get('/api/test', async (req, res) => {
 app.get('/api/products', async (req, res) => {
   try {
     const pool = await getPool();
+    // Support server-side filtering by SubCategory for better performance
+    const subCat = req.query.subCategory || req.query.subcategory || null;
+    if (subCat) {
+      // Detect which column exists for sub/category information and perform a case-insensitive match.
+      try {
+        const colsRes = await pool.request().input('tbl', 'Products')
+          .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+        const names = (colsRes.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+        const candidates = ['SubCategory','Sub_Category','Subcategory','subcategory','subCategory','Category','category'];
+        const found = candidates.find(c => names.includes(c));
+        const col = found || 'SubCategory';
+        // Use LOWER(...) = LOWER(@sub) for case-insensitive comparison regardless of DB collation
+        const q = `SELECT * FROM Products WHERE LOWER(${col}) = LOWER(@sub)`;
+        const r = await pool.request().input('sub', String(subCat)).query(q);
+        return res.json(r.recordset);
+      } catch (e) {
+        console.warn('SubCategory filter fallback failed, returning unfiltered products', e);
+        // fall through to return full list
+      }
+    }
+
     const result = await pool.request().query('SELECT TOP (100) * FROM Products');
     res.json(result.recordset);
   } catch (err) {
@@ -310,7 +331,7 @@ app.post('/api/admin/feedbacks/:id/reply', authMiddleware(['admin']), async (req
 
 // Admin: create product
 app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
-  const allowed = ['Name','name','Price','price','OriginalPrice','ImageUrl','Description','Discount','Rating','Reviews','Stock','Category','Status'];
+  const allowed = ['Name','name','Price','price','OriginalPrice','ImageUrl','Description','Rating','Reviews','Stock','Category','Status'];
   const body = req.body || {};
   // normalize image property casing and ensure non-null ImageUrl to satisfy DB NOT NULL constraint
   if (!body.ImageUrl && body.imageUrl) body.ImageUrl = body.imageUrl;
@@ -327,10 +348,20 @@ app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
   } catch (e) {
     body.Discount = 0;
   }
-  const keys = Object.keys(body).filter(k => allowed.includes(k));
-  if (!keys.length) return res.status(400).json({ error: 'No valid fields to create' });
   try {
     const pool = await getPool();
+    // If DB defines Discount as a computed column, remove it from the insert body
+    try {
+      const colQ = await pool.request().input('tbl', 'Products').input('col', 'Discount')
+        .query("SELECT is_computed FROM sys.columns WHERE object_id = OBJECT_ID(@tbl) AND name = @col");
+      const isComputed = colQ.recordset && colQ.recordset[0] && colQ.recordset[0].is_computed;
+      if (isComputed) delete body.Discount;
+    } catch (e) {
+      // best-effort: if check fails, proceed with insert and let DB report any issue
+    }
+
+    const keys = Object.keys(body).filter(k => allowed.includes(k));
+    if (!keys.length) return res.status(400).json({ error: 'No valid fields to create' });
     // Build INSERT with parameters
     const cols = keys.map(k => `[${k}]`).join(', ');
     const vals = keys.map((k, i) => `@v${i}`).join(', ');
@@ -349,7 +380,7 @@ app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
 app.put('/api/admin/products/:id', authMiddleware(['admin']), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid product id' });
-  const allowed = ['Name','name','Price','price','OriginalPrice','ImageUrl','Description','Discount','Rating','Reviews','Stock','Category','Status'];
+  const allowed = ['Name','name','Price','price','OriginalPrice','ImageUrl','Description','Rating','Reviews','Stock','Category','Status'];
   const updates = req.body || {};
   const keys = Object.keys(updates).filter(k => allowed.includes(k));
   if (!keys.length) return res.status(400).json({ error: 'No valid fields to update' });
@@ -368,8 +399,23 @@ app.put('/api/admin/products/:id', authMiddleware(['admin']), async (req, res) =
       if (Number.isFinite(newPrice) && Number.isFinite(newOriginal) && newOriginal > 0 && newPrice < newOriginal) {
         disc = Math.round(((newOriginal - newPrice) / newOriginal) * 100);
       }
-      updates.Discount = disc;
-      if (!keys.includes('Discount')) keys.push('Discount');
+      // Only update Discount if the DB column is writable (not a computed column)
+      try {
+        const colQ = await pool.request().input('tbl', 'Products').input('col', 'Discount')
+          .query("SELECT is_computed FROM sys.columns WHERE object_id = OBJECT_ID(@tbl) AND name = @col");
+        const isComputed = colQ.recordset && colQ.recordset[0] && colQ.recordset[0].is_computed;
+        if (!isComputed) {
+          updates.Discount = disc;
+          if (!keys.includes('Discount')) keys.push('Discount');
+        } else {
+          // ensure we don't attempt to write Discount
+          delete updates.Discount;
+        }
+      } catch (e) {
+        // If check fails, fall back to attempting to update Discount (DB will error if not allowed)
+        updates.Discount = disc;
+        if (!keys.includes('Discount')) keys.push('Discount');
+      }
     }
 
     // Build SET clause safely using parameters

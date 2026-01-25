@@ -126,7 +126,7 @@ export default function AdminDashboard() {
                     <td className="py-3 px-4 font-medium">{product.Name ?? product.name}</td>
                     <td className="py-3 px-4">{product.Rating ?? product.rating ?? 0}</td>
                     <td className="py-3 px-4">{product.Reviews ?? product.reviews ?? 0}</td>
-                    <td className="py-3 px-4 font-semibold text-blue-600">{product.Price ? `$${Number(product.Price).toFixed(2)}` : '—'}</td>
+                    <td className="py-3 px-4 font-semibold text-blue-600">{product.Price ? `${Number(product.Price).toFixed(2)} ₼` : '—'}</td>
                   </tr>
                 ))}
               </tbody>

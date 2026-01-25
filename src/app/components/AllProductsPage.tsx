@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, Heart, Star } from 'lucide-react';
 import { useWishlist } from './WishlistContext';
 import { useAuth } from './AuthContext';
@@ -20,6 +20,7 @@ type Product = {
 
 export default function AllProductsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,10 @@ export default function AllProductsPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/products');
+        const params = new URLSearchParams(location.search);
+        const sub = params.get('subCategory') || params.get('subcategory');
+        const url = sub ? `/api/products?subCategory=${encodeURIComponent(sub)}` : '/api/products';
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const normalized = (data || []).map((p: any) => ({
@@ -66,19 +70,30 @@ export default function AllProductsPage() {
       {products.length === 0 ? (
         <div className="text-gray-600">No products found.</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {products.map((product) => (
+        (() => {
+          const params = new URLSearchParams(location.search);
+          const categoryParam = (params.get('category') || '').toString().trim().toLowerCase();
+          const tokens = categoryParam.split(/[^a-z0-9]+/i).filter(Boolean);
+          const displayedProducts = (products || []).filter((p) => {
+            if (!categoryParam) return true;
+            const hay = `${p.name || ''} ${(p as any).category || ''} ${(p as any).description || ''}`.toString().toLowerCase();
+            return tokens.length === 0 ? true : tokens.some(t => hay.includes(t));
+          });
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {displayedProducts.map((product) => (
             <div
               key={product.id}
               className="bg-white rounded-xl shadow-lg hover:shadow-xl transition overflow-hidden group cursor-pointer"
               onClick={() => navigate(`/products/${product.id}`)}
             >
               {/* IMAGE */}
-              <div className="relative">
+              <div className="relative bg-white flex items-center justify-center">
                 <ImageWithFallback
                   src={product.imageUrl || ''}
                   alt={product.name}
-                  className="w-full h-64 object-cover group-hover:scale-105 transition duration-300"
+                  className="w-full h-48 md:h-56 lg:h-64 object-contain p-6 group-hover:scale-105 transition duration-300"
                 />
 
                 {product.discount && product.discount > 0 && (
@@ -140,11 +155,11 @@ export default function AllProductsPage() {
                 {/* PRICE */}
                 <div className="flex items-center gap-3 mb-4">
                   <span className="text-2xl font-bold text-blue-600">
-                    ${Number(product.price).toFixed(2)}
+                    {`${Number(product.price).toFixed(2)} ₼`}
                   </span>
                   {product.originalPrice && (
                     <span className="text-lg text-gray-400 line-through">
-                      ${Number(product.originalPrice).toFixed(2)}
+                      {`${Number(product.originalPrice).toFixed(2)} ₼`}
                     </span>
                   )}
                 </div>
@@ -159,8 +174,10 @@ export default function AllProductsPage() {
                 </button>
               </div>
             </div>
-          ))}
-        </div>
+              ))}
+            </div>
+          );
+        })()
       )}
     </div>
   );

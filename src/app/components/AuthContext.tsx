@@ -91,6 +91,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } else {
         throw new Error(res.data?.error || 'Registration failed');
       }
+    } catch (err: any) {
+      const serverMsg = err?.response?.data?.error;
+      throw new Error(serverMsg || err.message || 'Registration failed');
     } finally {
       const elapsed = Date.now() - start;
       if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));

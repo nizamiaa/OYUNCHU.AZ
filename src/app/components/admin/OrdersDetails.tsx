@@ -115,8 +115,18 @@ export default function OrdersDetails() {
             <div>
               <p className="text-sm text-gray-600">Phone</p>
               <p className="font-semibold">{order.Phone || order.phone || '—'}</p>
+              <p className="text-sm text-gray-600 mt-2">Şəhər</p>
+              <p className="font-semibold">{order.City || order.city || order.CityName || order.cityName || '—'}</p>
               <p className="text-sm text-gray-600 mt-2">Address</p>
               <p className="font-semibold">{order.Address || order.address || '—'}</p>
+              {(
+                order.BranchName || order.Branch || order.StoreName || order.Store || order.BranchId || order.StoreId
+              ) ? (
+                <>
+                  <p className="text-sm text-gray-600 mt-2">Mağaza</p>
+                  <p className="font-semibold">{order.BranchName || order.Branch || order.StoreName || order.Store || order.BranchId || order.StoreId}</p>
+                </>
+              ) : null}
             </div>
             <div>
               <div className="flex items-center justify-between">

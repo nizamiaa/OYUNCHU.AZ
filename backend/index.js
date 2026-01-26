@@ -6,7 +6,9 @@ import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import sql from 'mssql';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 const require = createRequire(import.meta.url);
@@ -20,6 +22,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(cors());
 app.use(bodyParser.json());
+
+// Simple rate limiter for register route to prevent bot signups
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // limit to 5 requests per window per IP
+  message: { error: 'Too many accounts created. Try later.' }
+});
 
 // Simple request logger for debugging route matching
 app.use((req, res, next) => {
@@ -37,23 +46,32 @@ app.post('/api/debug', (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 
-// authMiddleware
-const authMiddleware = (roles = []) => (req, res, next) => {
+// authMiddleware: verify token then load user role from DB on each request
+const authMiddleware = (roles = []) => async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    const userId = decoded && decoded.id;
+    if (!userId) return res.status(401).json({ error: 'Invalid token' });
+
+    // load fresh user info (role/name/status) from DB per request
+    const pool = await getPool();
+    const ures = await pool.request().input('id', userId).query('SELECT TOP (1) Id, Name, Role, Status FROM Users WHERE Id = @id');
+    if (!ures.recordset || ures.recordset.length === 0) return res.status(401).json({ error: 'Invalid token - user not found' });
+    const user = ures.recordset[0];
 
     if (roles.length) {
-      const userRole = String(decoded.role || '').toLowerCase();
+      const userRole = String(user.Role || '').toLowerCase();
       const allowed = roles.map(r => String(r).toLowerCase());
       if (!allowed.includes(userRole)) return res.status(403).json({ error: 'Forbidden' });
     }
 
-    req.user = decoded; // user info: id + role
+    req.user = { id: user.Id, role: user.Role, name: user.Name, status: user.Status };
     next();
   } catch (err) {
+    console.error('authMiddleware error:', err);
     res.status(401).json({ error: 'Invalid token' });
   }
 };
@@ -99,6 +117,10 @@ app.get('/api/products', async (req, res) => {
     res.json(result.recordset);
   } catch (err) {
     console.error(err);
+    const msg = String(err || '');
+    if (msg.includes('Invalid column name') && msg.includes('EmailVerifyToken')) {
+      return res.status(500).json({ error: 'Database missing EmailVerifyToken column. Run: ALTER TABLE Users ADD EmailVerifyToken NVARCHAR(128) NULL; ALTER TABLE Users ADD IsVerified BIT DEFAULT 0 NOT NULL;' });
+    }
     res.status(500).json({ error: String(err) });
   }
 });
@@ -328,6 +350,25 @@ app.post('/api/admin/feedbacks/:id/reply', authMiddleware(['admin']), async (req
   }
 });
 
+// Admin: delete a feedback
+app.delete('/api/admin/feedbacks/:id', authMiddleware(['admin']), async (req, res) => {
+  const fid = parseInt(req.params.id, 10);
+  if (isNaN(fid)) return res.status(400).json({ error: 'Invalid feedback id' });
+  try {
+    const pool = await getPool();
+    try {
+      await pool.request().input('fid', fid).query('DELETE FROM Feedback WHERE Id = @fid');
+      return res.json({ ok: true, deletedId: fid });
+    } catch (dbErr) {
+      console.error('Delete feedback failed:', dbErr);
+      return res.status(500).json({ error: 'Failed to delete feedback' });
+    }
+  } catch (err) {
+    console.error('DELETE FEEDBACK ERROR', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 
 // Admin: create product
 app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
@@ -525,6 +566,27 @@ app.get('/api/admin/orders', authMiddleware(['admin']), async (req, res) => {
       } catch (fe) {
         console.warn('Failed to read orders_store.json', fe.message);
       }
+      // Merge lightweight branch mapping if present
+      try {
+        const mappingPath = path.join(__dirname, 'order_branches.json');
+        if (fs.existsSync(mappingPath)) {
+          const raw = fs.readFileSync(mappingPath, 'utf8');
+          const map = JSON.parse(raw || '{}');
+          list = (list || []).map(o => {
+            const id = String(o.Id ?? o.id ?? o.Id);
+            const m = map[id];
+            if (m) {
+              const patched = { ...o };
+              if (!patched.BranchName && m.branchName) patched.BranchName = m.branchName;
+              if (!patched.City && m.city) patched.City = m.city;
+              return patched;
+            }
+            return o;
+          });
+        }
+      } catch (me) {
+        console.warn('Failed to merge order branch mapping', me.message || me);
+      }
       return res.json(list);
     } catch (e) {
       // Table missing or different schema
@@ -559,6 +621,22 @@ app.get('/api/admin/orders/:id', authMiddleware(['admin']), async (req, res) => 
       const ordRes = await pool.request().input('id', id).query('SELECT TOP (1) * FROM Orders WHERE Id = @id');
       if (ordRes.recordset.length === 0) return res.status(404).json({ error: 'Order not found' });
       const order = ordRes.recordset[0];
+      // Merge branch mapping for single order if present
+      try {
+        const mappingPath = path.join(__dirname, 'order_branches.json');
+        if (fs.existsSync(mappingPath)) {
+          const raw = fs.readFileSync(mappingPath, 'utf8');
+          const map = JSON.parse(raw || '{}');
+          const idKey = String(order.Id || order.id || '');
+          const m = map[idKey];
+          if (m) {
+            if ((!order.BranchName && !order.Branch) && m.branchName) order.BranchName = m.branchName;
+            if ((!order.City && !order.city) && m.city) order.City = m.city;
+          }
+        }
+      } catch (me) {
+        console.warn('Failed to merge single order branch mapping', me.message || me);
+      }
       // select items
       let items = [];
       try {
@@ -629,6 +707,43 @@ app.get('/api/admin/orders/:id', authMiddleware(['admin']), async (req, res) => 
   }
 });
 
+// Admin: delete order (attempt DB delete, fallback to JSON store)
+app.delete('/api/admin/orders/:id', authMiddleware(['admin']), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid order id' });
+  try {
+    const pool = await getPool();
+    try {
+      // delete order items then order
+      await pool.request().input('id', id).query('DELETE FROM OrderItems WHERE OrderId = @id; DELETE FROM Orders WHERE Id = @id;');
+      return res.json({ ok: true, deletedId: id });
+    } catch (dbErr) {
+      console.warn('DB delete order failed, falling back to file store:', dbErr.message);
+      // fallback to file
+      try {
+        const storePath = path.join(__dirname, 'orders_store.json');
+        if (fs.existsSync(storePath)) {
+          const raw = fs.readFileSync(storePath, 'utf8');
+          let list = JSON.parse(raw || '[]');
+          const before = list.length;
+          list = list.filter(o => String(o.id) !== String(id) && String(o.Id) !== String(id));
+          if (list.length < before) {
+            fs.writeFileSync(storePath, JSON.stringify(list, null, 2), 'utf8');
+            return res.json({ ok: true, deletedId: id });
+          }
+        }
+        return res.status(404).json({ error: 'Order not found' });
+      } catch (fe) {
+        console.error('Fallback delete failed:', fe);
+        return res.status(500).json({ error: 'Failed to delete order' });
+      }
+    }
+  } catch (err) {
+    console.error('DELETE ORDER ERROR', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // Create order endpoint: tries DB insert, falls back to JSON file storage
 app.post('/api/orders', async (req, res) => {
   const payload = req.body || {};
@@ -657,7 +772,46 @@ app.post('/api/orders', async (req, res) => {
       req.input('Discount', sql.Decimal(18,2), discount || 0);
       req.input('Total', sql.Decimal(18,2), total || 0);
 
-      const insertOrderSql = `INSERT INTO Orders (CustomerName, Phone, Address, PaymentMethod, DeliveryMethod, Status, Subtotal, Discount, Total, CreatedAt) OUTPUT INSERTED.Id VALUES (@CustomerName, @Phone, @Address, @PaymentMethod, @DeliveryMethod, @Status, @Subtotal, @Discount, @Total, GETDATE())`;
+      // Detect Orders table columns and include branch/store fields when available
+      let extraColumns = [];
+      let extraInsertParams = [];
+      try {
+        const colsRes = await pool.request().input('tbl', 'Orders').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+        const names = (colsRes.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+        // common branch/store and city column candidates
+        const branchIdCandidates = ['BranchId','BranchID','StoreId','StoreID'];
+        const branchNameCandidates = ['BranchName','Branch','StoreName','Store'];
+        const cityCandidates = ['City','CityName','Town','Region','ShippingCity','DeliveryCity'];
+        const foundBranchId = branchIdCandidates.find(c => names.includes(c));
+        const foundBranchName = branchNameCandidates.find(c => names.includes(c));
+        const foundCity = cityCandidates.find(c => names.includes(c));
+        if (foundBranchId) {
+          extraColumns.push(foundBranchId);
+          extraInsertParams.push({ param: foundBranchId, value: payload.branchId ?? payload.branchId ?? payload.branch ?? null, type: sql.NVarChar(100) });
+        }
+        if (foundBranchName) {
+          extraColumns.push(foundBranchName);
+          extraInsertParams.push({ param: foundBranchName, value: payload.branchName ?? payload.branch ?? null, type: sql.NVarChar(200) });
+        }
+        if (foundCity) {
+          extraColumns.push(foundCity);
+          extraInsertParams.push({ param: foundCity, value: payload.city ?? payload.City ?? null, type: sql.NVarChar(150) });
+        }
+      } catch (colErr) {
+        // ignore and proceed without extra columns
+      }
+
+      // attach extra inputs to request
+      extraInsertParams.forEach(p => {
+        req.input(p.param, p.type, p.value);
+      });
+
+      // Build INSERT statement dynamically to include optional columns
+      const baseCols = ['CustomerName','Phone','Address','PaymentMethod','DeliveryMethod','Status','Subtotal','Discount','Total','CreatedAt'];
+      const baseParams = ['@CustomerName','@Phone','@Address','@PaymentMethod','@DeliveryMethod','@Status','@Subtotal','@Discount','@Total','GETDATE()'];
+      const allCols = baseCols.concat(extraColumns);
+      const allParams = baseParams.concat(extraInsertParams.map(p => `@${p.param}`));
+      const insertOrderSql = `INSERT INTO Orders (${allCols.map(c => `[${c}]`).join(',')}) OUTPUT INSERTED.Id VALUES (${allParams.join(',')})`;
       const inserted = await req.query(insertOrderSql);
       const orderId = inserted.recordset && inserted.recordset[0] && (inserted.recordset[0].Id || inserted.recordset[0].id || inserted.recordset[0].ID) || null;
 
@@ -696,6 +850,23 @@ app.post('/api/orders', async (req, res) => {
       }
 
       await tx.commit();
+      // If DB did not have branch/store columns but client provided branchName,
+      // persist a lightweight mapping so admin UI can display selected branch.
+      try {
+        const mappingPath = path.join(__dirname, 'order_branches.json');
+        // Persist lightweight mapping when client provided branchName or city
+        if (payload.branchName || payload.city) {
+          let map = {};
+          if (fs.existsSync(mappingPath)) {
+            try { map = JSON.parse(fs.readFileSync(mappingPath, 'utf8') || '{}'); } catch (e) { map = {}; }
+          }
+          map[String(orderId)] = { branchName: payload.branchName ?? null, city: payload.city ?? null };
+          fs.writeFileSync(mappingPath, JSON.stringify(map, null, 2), 'utf8');
+        }
+      } catch (mapErr) {
+        console.warn('Failed to persist order branch mapping:', mapErr.message || mapErr);
+      }
+
       return res.json({ success: true, orderId });
     } catch (dbErr) {
       console.warn('DB insert failed, falling back to JSON store:', dbErr.message);
@@ -911,6 +1082,7 @@ app.get('/api/users', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  const emailNormalized = String(email).toLowerCase().trim();
 
   try {
     const pool = await getPool();
@@ -925,11 +1097,19 @@ app.post('/api/login', async (req, res) => {
     }
 
     const selectCols = ['Id', 'Name', 'Email', 'Password', 'Role', 'Status'];
+    // include IsVerified if the column exists so we can block unverified logins
+    try {
+      const cols2 = await pool.request().input('tbl','Users').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+      const names2 = (cols2.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+      if (names2.includes('IsVerified')) selectCols.push('IsVerified');
+    } catch (e) {
+      // ignore
+    }
     if (surnameColLogin) selectCols.push(`[${surnameColLogin}] AS Surname`);
 
     const result = await pool.request()
-      .input('email', email)
-      .query(`SELECT ${selectCols.join(', ')} FROM Users WHERE Email = @email`);
+      .input('email', emailNormalized)
+      .query(`SELECT ${selectCols.join(', ')} FROM Users WHERE LOWER(Email) = LOWER(@email)`);
 
     if (result.recordset.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
 
@@ -939,13 +1119,19 @@ app.post('/api/login', async (req, res) => {
     const acctStatus = String(user.Status ?? user.status ?? 'active').toLowerCase();
     if (acctStatus === 'inactive') return res.status(403).json({ error: 'Sizin hesabiniz block olunub zehmet olmasa magaza ile elaqe saxlayin' });
 
+    // If IsVerified column exists and account is not verified, block before password check
+    if (typeof user.IsVerified !== 'undefined') {
+      const isVerifiedVal = user.IsVerified === 1 || user.IsVerified === true || String(user.IsVerified).toLowerCase() === 'true';
+      if (!isVerifiedVal) return res.status(403).json({ error: 'Please verify your email first' });
+    }
+
     // Check password
     const valid = await bcrypt.compare(password, user.Password);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-    // JWT token (include display name combining Name + Surname when available)
+    // JWT token: keep payload minimal (only id). Role will be loaded from DB per request.
     const displayName = user.Surname ? `${user.Name} ${user.Surname}` : user.Name;
-    const token = jwt.sign({ id: user.Id, role: user.Role, name: displayName }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.Id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
 
     const respUser = { Id: user.Id, Name: user.Name, Email: user.Email, Role: user.Role };
     if (user.Surname) respUser.Surname = user.Surname;
@@ -957,7 +1143,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', registerLimiter, async (req, res) => {
   const { name, surname, email, password } = req.body;
   console.log('POST /api/register body:', req.body);
   // stricter validation
@@ -965,23 +1151,49 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ error: 'All fields required: name, email, password' });
   }
 
+  // Normalize and validate email early to avoid duplicates like Test@.. vs test@..
+  const emailNormalized = String(email).toLowerCase().trim();
+
+  // Email format validation (backend must enforce this)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(emailNormalized)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+
+  // Password strength: minimum 8 characters (suggest stronger regex if desired)
+  if (!password || password.toString().length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
   try {
     const pool = await getPool();
     // Check if email exists
-    const existing = await pool.request().input('email', email).query('SELECT Id FROM Users WHERE Email = @email');
-    if (existing.recordset.length > 0) return res.status(400).json({ error: 'Email already exists' });
+    const existing = await pool.request().input('email', emailNormalized).query('SELECT Id FROM Users WHERE LOWER(Email) = LOWER(@email)');
+    if (existing.recordset.length > 0) return res.status(400).json({ error: 'Bu mail artıq qeydiyyatdan keçib' });
 
     // Hash password
     const hashed = await bcrypt.hash(password, 10);
 
-    // Allow role assignment only by an authenticated admin
+    // New users will be marked verified immediately (IsVerified = 1)
+
+    // Allow role assignment only by an authenticated admin (verify role via DB)
     let role = 'user';
     const authHeader = req.headers.authorization?.split(' ')[1];
     if (req.body.role && authHeader) {
       try {
         const decoded = jwt.verify(authHeader, process.env.JWT_SECRET || 'secret');
-        if (decoded.role === 'admin') {
-          role = req.body.role;
+        const adminId = decoded && decoded.id;
+        if (adminId) {
+          try {
+            const pool2 = await getPool();
+            const adminRes = await pool2.request().input('id', adminId).query('SELECT Role FROM Users WHERE Id = @id');
+            const adminRow = adminRes.recordset && adminRes.recordset[0];
+            if (adminRow && String(adminRow.Role || '').toLowerCase() === 'admin') {
+              role = req.body.role;
+            }
+          } catch (innerErr) {
+            // ignore DB errors and fall back to default 'user'
+          }
         }
       } catch (e) {
         // ignore invalid token - default to user
@@ -989,24 +1201,32 @@ app.post('/api/register', async (req, res) => {
     }
 
     // Insert user and return created row
-    // Detect if Users table has a surname-like column
+    // Detect Users table columns (to know whether EmailVerifyToken / IsVerified exist)
     let surnameCol = null;
+    let userCols = [];
     try {
       const cols = await pool.request().input('tbl', 'Users').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
-      const names = (cols.recordset || []).map(r => String(r.COLUMN_NAME || ''));
-      surnameCol = names.find(n => /surname|last.?name/i.test(n)) || null;
+      userCols = (cols.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+      surnameCol = userCols.find(n => /surname|last.?name/i.test(n)) || null;
     } catch (e) {
       surnameCol = null;
+      userCols = [];
+    }
+
+    const hasIsVerifiedCol = userCols.includes('IsVerified');
+
+    if (!hasIsVerifiedCol) {
+      return res.status(500).json({ error: 'Database missing IsVerified column. Run: ALTER TABLE Users ADD IsVerified BIT DEFAULT 0 NOT NULL;' });
     }
 
     let result;
     if (surnameCol) {
-      const colsList = `Name, [${surnameCol}], Email, Password, Role, Created_at`;
-      const vals = `@name, @surname, @email, @password, @role, GETDATE()`;
+      const colsList = `Name, [${surnameCol}], Email, Password, Role, Created_at, IsVerified`;
+      const vals = `@name, @surname, @email, @password, @role, GETDATE(), 1`;
       result = await pool.request()
         .input('name', name)
         .input('surname', surname || '')
-        .input('email', email)
+        .input('email', emailNormalized)
         .input('password', hashed)
         .input('role', role)
         .query(`INSERT INTO Users (${colsList}) OUTPUT INSERTED.* VALUES (${vals})`);
@@ -1015,22 +1235,62 @@ app.post('/api/register', async (req, res) => {
       const full = surname ? `${name} ${surname}` : name;
       result = await pool.request()
         .input('name', full)
-        .input('email', email)
+        .input('email', emailNormalized)
         .input('password', hashed)
         .input('role', role)
-        .query(`INSERT INTO Users (Name, Email, Password, Role, Created_at) OUTPUT INSERTED.* VALUES (@name, @email, @password, @role, GETDATE())`);
+        .query(`INSERT INTO Users (Name, Email, Password, Role, Created_at, IsVerified) OUTPUT INSERTED.* VALUES (@name, @email, @password, @role, GETDATE(), 1)`);
     }
 
-    const user = result.recordset[0];
+    let user = result.recordset[0];
 
-    // JWT token
-    const token = jwt.sign({ id: user.Id, role: user.Role || 'user', name: user.Name }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    // Defensive: ensure the user row is marked verified and any token cleared (in case DB triggers exist)
+    try {
+      await pool.request().input('id', user.Id).query('UPDATE Users SET IsVerified = 1, EmailVerifyToken = NULL WHERE Id = @id');
+      const refreshed = await pool.request().input('id', user.Id).query('SELECT TOP 1 * FROM Users WHERE Id = @id');
+      if (refreshed.recordset && refreshed.recordset[0]) user = refreshed.recordset[0];
+    } catch (e) {
+      console.warn('Failed to enforce IsVerified on created user:', e);
+    }
+
+    // JWT token: minimal payload (id only)
+    const token = jwt.sign({ id: user.Id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
 
     res.json({ ok: true, user, token });
 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: String(err) });
+  }
+});
+
+// Email verification endpoint
+app.get('/api/verify-email/:token', async (req, res) => {
+  const { token } = req.params;
+  try {
+    const pool = await getPool();
+
+    const userRes = await pool.request()
+      .input('token', token)
+      .query('SELECT Id FROM Users WHERE EmailVerifyToken = @token');
+
+    if (!userRes.recordset || userRes.recordset.length === 0) {
+      return res.status(400).send('Invalid token');
+    }
+
+    const userId = userRes.recordset[0].Id;
+    await pool.request()
+      .input('id', userId)
+      .query(`
+        UPDATE Users
+        SET IsVerified = 1,
+            EmailVerifyToken = NULL
+        WHERE Id = @id
+      `);
+
+    res.send('Email verified');
+  } catch (e) {
+    console.error('Email verify failed:', e);
+    res.status(500).send('Verify failed');
   }
 });
 
@@ -1095,8 +1355,10 @@ app.post('/api/admin/users', authMiddleware(['admin']), async (req, res) => {
   if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
   try {
     const pool = await getPool();
+    // normalize email
+    const emailNormalized = String(email).toLowerCase().trim();
     // check existing
-    const exists = await pool.request().input('email', email).query('SELECT Id FROM Users WHERE Email = @email');
+    const exists = await pool.request().input('email', emailNormalized).query('SELECT Id FROM Users WHERE LOWER(Email) = LOWER(@email)');
     if (exists.recordset.length > 0) return res.status(400).json({ error: 'Email already exists' });
 
     const plain = password && String(password).trim() ? String(password) : Math.random().toString(36).slice(-8);
@@ -1105,7 +1367,7 @@ app.post('/api/admin/users', authMiddleware(['admin']), async (req, res) => {
     const userStatus = req.body && req.body.status ? String(req.body.status) : 'active';
     const ins = await pool.request()
       .input('name', name)
-      .input('email', email)
+      .input('email', emailNormalized)
       .input('password', hashed)
       .input('role', userRole)
       .input('status', userStatus)

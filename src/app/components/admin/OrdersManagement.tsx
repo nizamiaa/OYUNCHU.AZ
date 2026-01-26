@@ -1,5 +1,5 @@
 import AdminLayout from './AdminLayout';
-import { Eye, Search } from 'lucide-react';
+import { Eye, Search, Trash } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -15,6 +15,7 @@ export default function OrdersManagement() {
   const { token } = useAuth();
   const [expandedOrder, setExpandedOrder] = useState<number | string | null>(null);
   const navigate = useNavigate();
+  const [deletingId, setDeletingId] = useState<number | string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,11 +101,6 @@ export default function OrdersManagement() {
       <div>
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Orders Management</h1>
-          <div className="flex gap-3">
-            <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
-              Export Orders
-            </button>
-          </div>
         </div>
 
         {/* Search & Filter */}
@@ -120,20 +116,6 @@ export default function OrdersManagement() {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
               />
             </div>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none">
-              <option>All Status</option>
-              <option>Pending</option>
-              <option>Processing</option>
-              <option>Shipped</option>
-              <option>Delivered</option>
-              <option>Cancelled</option>
-            </select>
-            <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none">
-              <option value="All Payments">All Payments</option>
-              <option value="card">Card</option>
-              <option value="paypal">PayPal</option>
-              <option value="bank">Bank Transfer</option>
-            </select>
           </div>
         </div>
 
@@ -145,6 +127,8 @@ export default function OrdersManagement() {
                 <tr>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Order ID</th>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Customer</th>
+                  <th className="text-left py-4 px-4 text-gray-600 font-semibold">Mağaza</th>
+                  <th className="text-left py-4 px-4 text-gray-600 font-semibold">Şəhər</th>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Date</th>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Items</th>
                   <th className="text-left py-4 px-4 text-gray-600 font-semibold">Total</th>
@@ -154,9 +138,9 @@ export default function OrdersManagement() {
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={8} className="py-6 px-4 text-center">Loading orders...</td></tr>}
-                {!loading && error && <tr><td colSpan={8} className="py-6 px-4 text-center text-red-600">{error}</td></tr>}
-                {!loading && !orders.length && !error && <tr><td colSpan={8} className="py-6 px-4 text-center">No orders available. If you have an Orders table, ensure its name and schema match expected fields.</td></tr>}
+                {loading && <tr><td colSpan={9} className="py-6 px-4 text-center">Loading orders...</td></tr>}
+                {!loading && error && <tr><td colSpan={9} className="py-6 px-4 text-center text-red-600">{error}</td></tr>}
+                {!loading && !orders.length && !error && <tr><td colSpan={9} className="py-6 px-4 text-center">No orders available. If you have an Orders table, ensure its name and schema match expected fields.</td></tr>}
                 {!loading && displayedOrders.map((order: any) => {
                   const idKey = order.Id ?? order.id;
                   return (
@@ -175,6 +159,8 @@ export default function OrdersManagement() {
                           return display || '—';
                         })()
                       }</td>
+                      <td className="py-3 px-4 text-gray-600">{order.BranchName || order.Branch || order.StoreName || order.Store || order.branchName || order.branch || '—'}</td>
+                      <td className="py-3 px-4 text-gray-600">{order.City || order.city || order.CityName || order.cityName || '—'}</td>
                       <td className="py-3 px-4 text-gray-600">{
                         (() => {
                           const rawDate = order.CreatedAt || order.Created_at || order.date || order.createdAt || order.created_at || order.created || order.created_at;
@@ -205,18 +191,41 @@ export default function OrdersManagement() {
                       <td className="py-3 px-4">
                         <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.Status ?? order.status ?? 'Pending')}`}>
                           {order.Status ?? order.status ?? 'Pending'}
+                        <td className="py-3 px-4 text-gray-600">{order.BranchName || order.Branch || order.StoreName || order.Store || order.branchName || order.branch || '—'}</td>
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <button onClick={() => navigate(`/admin/orders/details/${idKey}`)} className="p-2 hover:bg-blue-50 rounded-lg transition">
-                          <Eye size={18} className="text-blue-600" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => navigate(`/admin/orders/details/${idKey}`)} className="p-2 hover:bg-blue-50 rounded-lg transition">
+                            <Eye size={18} className="text-blue-600" />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const ok = window.confirm(`Sifarişi silmək istədiyinizə əminsiniz? (#${idKey})`);
+                                if (!ok) return;
+                                setDeletingId(idKey);
+                                await axios.delete(`/api/admin/orders/${idKey}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                                setOrders(prev => prev.filter(o => String(o.Id ?? o.id) !== String(idKey)));
+                              } catch (e: any) {
+                                console.error('Delete order failed', e);
+                                setError(e?.response?.data?.error || e.message || 'Failed to delete order');
+                              } finally {
+                                setDeletingId(null);
+                              }
+                            }}
+                            className="p-2 hover:bg-red-50 rounded-lg transition text-red-600"
+                            title="Delete order"
+                          >
+                            <Trash size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
 
                     {expandedOrder === idKey && (
                       <tr className="bg-gray-50">
-                        <td colSpan={8} className="py-4 px-6 text-sm text-gray-700">
+                        <td colSpan={9} className="py-4 px-6 text-sm text-gray-700">
                           <div className="font-semibold mb-2">Order items</div>
                           {Array.isArray(order.items) ? (
                             <ul className="list-disc pl-6">

@@ -14,10 +14,11 @@ const { getPool } = require('./db.cjs');
   try {
     const pool = await getPool();
 
-    // check existing
-    const existing = await pool.request().input('email', email).query('SELECT Id FROM Users WHERE Email = @email');
+    // normalize email and check existing
+    const emailNormalized = String(email).toLowerCase().trim();
+    const existing = await pool.request().input('email', emailNormalized).query('SELECT Id FROM Users WHERE LOWER(Email) = LOWER(@email)');
     if (existing.recordset.length > 0) {
-      console.log('Admin already exists.');
+      console.log('Bu mail artıq qeydiyyatdan keçib (admin).');
       process.exit(0);
     }
 
@@ -25,10 +26,10 @@ const { getPool } = require('./db.cjs');
 
     const result = await pool.request()
       .input('name', name)
-      .input('email', email)
+      .input('email', emailNormalized)
       .input('password', hashed)
       .input('role', 'admin')
-      .query("INSERT INTO Users (Name, Email, Password, Role, Created_at) OUTPUT INSERTED.Id VALUES (@name, @email, @password, @role, GETDATE())");
+      .query("INSERT INTO Users (Name, Email, Password, Role, Created_at, IsVerified) OUTPUT INSERTED.Id VALUES (@name, @email, @password, @role, GETDATE(), 1)");
 
     console.log('Created admin user:', result.recordset[0]);
     process.exit(0);

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from './AuthContext';
 import { useCart } from './CartContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -7,6 +8,7 @@ import { branches } from './BranchesPage';
 export default function CheckoutPage() {
   const { items, totalPrice, selectedItems, selectedTotal } = useCart();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [name, setName] = useState('');
   const [surname, setSurname] = useState('');
   const COUNTRY_PREFIX = '+994';
@@ -51,6 +53,7 @@ export default function CheckoutPage() {
       payment,
       deliveryMethod,
       branchId: selectedBranchId,
+      branchName: selectedBranchId ? (branches.find(b => String(b.id) === String(selectedBranchId))?.name || null) : null,
       total: (selectedItems && selectedItems.length) ? selectedTotal : totalPrice,
       items: itemsToSend.map(i => ({ id: i.id, price: i.price, qty: i.qty }))
     };
@@ -78,6 +81,14 @@ export default function CheckoutPage() {
       setPayment(prev => (prev === 'card' || prev === 'cash' ? prev : 'card'));
     }
   }, [deliveryMethod]);
+
+  // If user is logged in, prefill name and surname
+  React.useEffect(() => {
+    if (user) {
+      if (user.name) setName(String(user.name));
+      if (user.surname) setSurname(String(user.surname));
+    }
+  }, [user]);
 
   return (
     <div className="p-8 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -119,25 +130,18 @@ export default function CheckoutPage() {
               <button type="button" onClick={() => setDeliveryMethod('pickup')} className={`px-3 py-2 rounded-full border ${deliveryMethod === 'pickup' ? 'bg-black text-white' : ''}`}>Mağazadan götür</button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm">Şəhər *</label>
-                {deliveryMethod === 'courier' ? (
+            {deliveryMethod === 'courier' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm">Şəhər *</label>
                   <input value={city} onChange={e => setCity(e.target.value)} className="w-full border-b py-2 mt-1" placeholder="Şəhər adını daxil edin" />
-                ) : (
-                  <select value={city} onChange={e => setCity(e.target.value)} className="w-full border-b py-2 mt-1">
-                    <option value="">--Şəhər seç--</option>
-                    <option value="baku">Baku</option>
-                    <option value="sumqayit">Sumqayit</option>
-                    <option value="gence">Gence</option>
-                  </select>
-                )}
+                </div>
+                <div>
+                  <label className="text-sm">Ünvan *</label>
+                  <input value={address} onChange={e => setAddress(e.target.value)} className="w-full border-b py-2 mt-1" />
+                </div>
               </div>
-              <div>
-                <label className="text-sm">Ünvan *</label>
-                <input value={address} onChange={e => setAddress(e.target.value)} className="w-full border-b py-2 mt-1" />
-              </div>
-            </div>
+            )}
 
             {deliveryMethod === 'pickup' && (
               <div className="mt-4">

@@ -106,9 +106,22 @@ export default function AllProductsPage() {
             const sc = (p.subCategory ?? '').toString().toLowerCase();
             return parts.includes(sc);
           });
-          setProducts(filtered);
+          // allow discounted-only filter on multi-sub results as well
+          const discounted = params.get('discounted');
+          if (discounted) {
+            setProducts(filtered.filter((p: Product) => Number(p.discount || 0) > 0));
+          } else {
+            setProducts(filtered);
+          }
         } else {
-          setProducts(normalized);
+          // handle discounted filter (banner "Shop Now")
+          const discounted = params.get('discounted');
+          if (discounted) {
+            const only = normalized.filter((p: Product) => Number(p.discount || 0) > 0);
+            setProducts(only);
+          } else {
+            setProducts(normalized);
+          }
         }
         // build dynamic category list from normalized products
         try {
@@ -151,39 +164,39 @@ export default function AllProductsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minPriceFilter, maxPriceFilter]);
 
-  // Load similar items (PS3/PS4) when viewing Playstation 5 subCategory
+  // Load similar items when viewing Playstation 5 subCategory — prefer PS5 games, fallback to PS3/PS4
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const rawSub = params.get('subCategory') || params.get('subcategory') || '';
-    const isPS5 = /playstation\s*5/i.test(rawSub);
-    if (!isPS5) {
+  const params = new URLSearchParams(location.search);
+  const rawSub = params.get('subCategory') || params.get('subcategory') || '';
+  const isPS5Page = rawSub.toLowerCase().includes('playstation 5');
+
+  if (!isPS5Page) {
+    setSimilarProducts([]);
+    return;
+  }
+
+  (async () => {
+    try {
+      const res = await fetch('/api/products?subCategory=PS5 Oyun');
+      if (!res.ok) return setSimilarProducts([]);
+
+      const data = await res.json();
+
+      const normalized = (data || []).map((p: any) => ({
+        id: Number(p.Id ?? p.id ?? 0),
+        name: p.Name ?? p.name ?? '',
+        price: Number(p.Price ?? p.price ?? 0) || 0,
+        imageUrl: p.ImageUrl ?? p.imageUrl ?? p.Image ?? undefined,
+      }));
+
+      setSimilarProducts(normalized.slice(0, 12));
+    } catch {
       setSimilarProducts([]);
-      return;
     }
+  })();
+}, [location.search]);
 
-    (async () => {
-      try {
-        const res = await fetch('/api/products');
-        if (!res.ok) return setSimilarProducts([]);
-        const data = await res.json();
-        const normalized = (data || []).map((p: any) => ({
-          id: Number(p.Id ?? p.id ?? 0),
-          name: p.Name ?? p.name ?? '',
-          price: Number(p.Price ?? p.price ?? 0) || 0,
-          imageUrl: p.ImageUrl ?? p.imageUrl ?? p.Image ?? undefined,
-          subCategory: p.SubCategory ?? p.Sub_Category ?? p.subCategory ?? p.subcategory ?? null,
-        }));
 
-        const sims = normalized.filter((p:any) => {
-          const sc = (p.subCategory || '').toString().toLowerCase();
-          return /playstation\s*3/i.test(sc) || /playstation\s*4/i.test(sc);
-        });
-        setSimilarProducts(sims.slice(0, 6));
-      } catch (e) {
-        setSimilarProducts([]);
-      }
-    })();
-  }, [location.search]);
 
   if (loading) return <div className="container mx-auto p-6">Loading products...</div>;
   if (error) return <div className="container mx-auto p-6 text-red-600">Error: {error}</div>;

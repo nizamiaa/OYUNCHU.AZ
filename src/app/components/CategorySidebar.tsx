@@ -50,7 +50,10 @@ export default function CategorySidebar() {
       <div className="mt-6 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-4 text-white">
         <h3 className="font-bold text-lg mb-1">Special Offer!</h3>
         <p className="text-sm mb-2">Up to 50% OFF on selected items</p>
-        <button className="bg-white text-orange-600 font-bold px-4 py-2 rounded-lg hover:bg-gray-100 transition text-sm">
+        <button
+          onClick={() => navigate('/products?discounted=true')}
+          className="bg-white text-orange-600 font-bold px-4 py-2 rounded-lg hover:bg-gray-100 transition text-sm"
+        >
           Shop Now
         </button>
       </div>

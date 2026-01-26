@@ -12,24 +12,22 @@ export default function CarouselSection() {
     },
     {
       url: 'https://images.unsplash.com/photo-1709587797077-7a2c94411514?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx4Ym94JTIwY29uc29sZSUyMGdhbWluZ3xlbnwxfHx8fDE3NjgxMTg1Njl8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      title: 'Xbox Series X',
-      description: 'Power your dreams'
+      title: 'Games',
+      description: 'Power your dreams',
+      category: 'Oyunlar'
     },
     {
       url: 'https://images.unsplash.com/photo-1676261233849-0755de764396?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxuaW50ZW5kbyUyMHN3aXRjaCUyMGdhbWluZ3xlbnwxfHx8fDE3NjgxMTg1Njl8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
       title: 'Nintendo Switch',
-      description: 'Play anywhere, anytime'
+      description: 'Play anywhere, anytime',
+      subCategory: 'Nintendo Oyun'
     },
     {
       url: 'https://images.unsplash.com/photo-1611138290962-2c550ffd4002?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBjb250cm9sbGVyfGVufDF8fHx8MTc2ODExODU3MHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
       title: 'Gaming Controllers',
-      description: 'Premium gaming experience'
+      description: 'Premium gaming experience',
+      category: 'Aksesuar'
     },
-    {
-      url: 'https://images.unsplash.com/photo-1677694690511-2e0646619c91?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx2aWRlbyUyMGdhbWUlMjBjb25zb2xlfGVufDF8fHx8MTc2ODExODU3MHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      title: 'Gaming Consoles',
-      description: 'Best deals on all consoles'
-    }
   ];
 
   const settings = {
@@ -58,7 +56,15 @@ export default function CarouselSection() {
                 <h3 className="text-white text-3xl font-bold mb-2">{item.title}</h3>
                 <p className="text-white/90 text-lg">{item.description}</p>
                 <button
-                  onClick={() => navigate(`/products?subCategory=${encodeURIComponent('Playstation 5')}`)}
+                  onClick={() => {
+                    if (item.category) {
+                      navigate(`/products?category=${encodeURIComponent(item.category)}`);
+                    } else if (item.subCategory) {
+                      navigate(`/products?subCategory=${encodeURIComponent(item.subCategory)}`);
+                    } else {
+                      navigate(`/products?subCategory=${encodeURIComponent(item.title === 'PlayStation 5' ? 'Playstation 5' : item.title)}`);
+                    }
+                  }}
                   className="mt-4 bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition"
                 >
                   Shop Now

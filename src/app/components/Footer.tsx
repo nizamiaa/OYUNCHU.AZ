@@ -53,16 +53,6 @@ export default function Footer() {
           <div>
             <h3 className="font-bold text-lg mb-4">Newsletter</h3>
             <p className="text-blue-200 text-sm mb-3">Subscribe for exclusive deals!</p>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                placeholder="Your email"
-                className="flex-1 px-3 py-2 rounded-lg text-gray-800 focus:outline-none"
-              />
-              <button className="bg-orange-500 p-2 rounded-lg hover:bg-orange-600 transition">
-                <Mail size={20} />
-              </button>
-            </div>
           </div>
         </div>
 

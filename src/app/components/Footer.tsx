@@ -57,7 +57,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-blue-800 mt-8 pt-6 text-center text-blue-300 text-sm">
-          <p>© 2026 Oyunchu. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Oyunchu. All rights reserved.</p>
         </div>
       </div>
     </footer>

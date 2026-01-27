@@ -95,8 +95,13 @@ export default function ProductDetail(){
               const localList = rawLocal ? JSON.parse(rawLocal) : [];
               const merged = [...mapped];
               for (const loc of (localList || [])) {
-                const exists = merged.some((m:any) => m.name === loc.name && (m.text === loc.text || m.date === loc.date));
-                if (!exists) merged.push(loc);
+                const idx = merged.findIndex((m:any) => m.name === loc.name && (m.text === loc.text || m.date === loc.date));
+                if (idx === -1) {
+                  merged.push(loc);
+                } else {
+                  // prefer server-provided fields (adminReply/adminReplyAt) when present
+                  merged[idx] = { ...loc, ...merged[idx] };
+                }
               }
               setReviews(merged);
               // focus on any review that already has an admin reply so reply is visible
@@ -177,24 +182,28 @@ export default function ProductDetail(){
             adminReplyAt: r.AdminReplyAt || r.AdminReplyDate || null,
           }));
 
-          // merge with local-only reviews stored in localStorage
-          try {
-            const rawLocal = localStorage.getItem(reviewsKey);
-            const localList = rawLocal ? JSON.parse(rawLocal) : [];
-            const merged = [...mapped];
-            for (const loc of (localList || [])) {
-              const exists = merged.some((m:any) => m.name === loc.name && (m.text === loc.text || m.date === loc.date));
-              if (!exists) merged.push(loc);
+            // merge with local-only reviews stored in localStorage
+            try {
+              const rawLocal = localStorage.getItem(reviewsKey);
+              const localList = rawLocal ? JSON.parse(rawLocal) : [];
+              const merged = [...mapped];
+              for (const loc of (localList || [])) {
+                const idx = merged.findIndex((m:any) => m.name === loc.name && (m.text === loc.text || m.date === loc.date));
+                if (idx === -1) {
+                  merged.push(loc);
+                } else {
+                  merged[idx] = { ...loc, ...merged[idx] };
+                }
+              }
+              setReviews(merged);
+              try { localStorage.setItem(reviewsKey, JSON.stringify(merged)); } catch (e) {}
+              const adminIdx = (merged || []).findIndex((m:any) => m.adminReply);
+              if (adminIdx >= 0) setCurrentReviewIndex(adminIdx);
+            } catch (e) {
+              setReviews(mapped);
+              const adminIdx2 = mapped.findIndex((m:any) => m.adminReply);
+              if (adminIdx2 >= 0) setCurrentReviewIndex(adminIdx2);
             }
-            setReviews(merged);
-            try { localStorage.setItem(reviewsKey, JSON.stringify(merged)); } catch (e) {}
-            const adminIdx = (merged || []).findIndex((m:any) => m.adminReply);
-            if (adminIdx >= 0) setCurrentReviewIndex(adminIdx);
-          } catch (e) {
-            setReviews(mapped);
-            const adminIdx2 = mapped.findIndex((m:any) => m.adminReply);
-            if (adminIdx2 >= 0) setCurrentReviewIndex(adminIdx2);
-          }
         }
       } catch (e) {
         // silent fail - keep existing reviews

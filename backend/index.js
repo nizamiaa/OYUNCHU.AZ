@@ -323,10 +323,11 @@ app.post('/api/admin/feedbacks/:id/reply', authMiddleware(['admin']), async (req
         UPDATE Feedback
         SET AdminReply = @replyText,
             AdminReplyName = @adminName,
-            AdminReplyDate = GETDATE()
+            AdminReplyDate = GETDATE(),
+            IsApproved = 1
         WHERE Id = @fid;
 
-        SELECT Id, AdminReply, AdminReplyName, AdminReplyDate
+        SELECT Id, AdminReply AS ReplyText, AdminReplyName, AdminReplyDate AS CreatedAt
         FROM Feedback WHERE Id = @fid
       `);
     
@@ -337,10 +338,32 @@ app.post('/api/admin/feedbacks/:id/reply', authMiddleware(['admin']), async (req
           .input('replyText', reply)
           .input('adminName', req.user.name)
           .input('replyAt', new Date())
-          .query('UPDATE Feedback SET AdminReply = @replyText, AdminReplyName = @adminName, AdminReplyDate = @replyAt WHERE Id = @fid');
+          .query('UPDATE Feedback SET AdminReply = @replyText, AdminReplyName = @adminName, AdminReplyDate = @replyAt, IsApproved = 1 WHERE Id = @fid');
       } catch (mirrorErr) {
         console.warn('Failed to mirror reply into Feedback table:', mirrorErr);
       }
+
+        // Also insert into FeedbackReplies table if it exists so public endpoints
+        // that prefer FeedbackReplies see the reply immediately.
+        try {
+          const colsRes = await pool.request().input('tbl', 'FeedbackReplies').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+          const cols = (colsRes.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+          if (cols.length) {
+            const insertCols = [];
+            const params = [];
+            const reqIns = pool.request();
+            if (cols.includes('FeedbackId')) { insertCols.push('FeedbackId'); reqIns.input('FeedbackId', fid); params.push('@FeedbackId'); }
+            if (cols.includes('ReplyText')) { insertCols.push('ReplyText'); reqIns.input('ReplyText', reply); params.push('@ReplyText'); }
+            if (cols.includes('CreatedAt')) { insertCols.push('CreatedAt'); reqIns.input('CreatedAt', new Date()); params.push('@CreatedAt'); }
+            if (cols.includes('CreatedBy') || cols.includes('AdminName')) { const cNameCol = cols.includes('CreatedBy') ? 'CreatedBy' : 'AdminName'; insertCols.push(cNameCol); reqIns.input('CreatedBy', req.user.name); params.push('@CreatedBy'); }
+            if (insertCols.length) {
+              const q = `INSERT INTO FeedbackReplies (${insertCols.join(',')}) VALUES (${params.join(',')})`;
+              try { await reqIns.query(q); } catch (ie) { /* non-fatal */ }
+            }
+          }
+        } catch (frErr) {
+          // ignore - optional enhancement only
+        }
 
     res.json({ ok: true, reply: upd.recordset[0] });
 

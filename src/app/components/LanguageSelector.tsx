@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
-import azFlag from "../../images/flags/az.png";
-import enFlag from "../../images/flags/en.png";
-import ruFlag from "../../images/flags/ru.png";
+import azFlag from "@/images/flags/az.png";
+import enFlag from "@/images/flags/en.png";
+import ruFlag from "@/images/flags/ru.png";
 
 const LANGUAGES = [
   { code: "az", label: "Azərbaycan", flag: azFlag },

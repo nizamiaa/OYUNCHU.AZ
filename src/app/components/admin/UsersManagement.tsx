@@ -7,6 +7,7 @@ import { useAuth } from '../AuthContext';
 export default function UsersManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [users, setUsers] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { token, user: authUser } = useAuth();
@@ -47,6 +48,24 @@ export default function UsersManagement() {
     return () => { cancelled = true; };
   }, [token]);
 
+  // load admin orders to compute per-user stats (best-effort matching)
+  useEffect(() => {
+    let cancelled = false;
+    const loadOrders = async () => {
+      if (!token) return;
+      try {
+        const res = await axios.get('/api/admin/orders', { headers: { Authorization: `Bearer ${token}` } });
+        if (cancelled) return;
+        setOrders(res.data || []);
+      } catch (e) {
+        console.warn('Failed to load admin orders for user stats', e);
+        setOrders([]);
+      }
+    };
+    loadOrders();
+    return () => { cancelled = true; };
+  }, [token]);
+
   // filtered list according to search term (name or email) + role + status
   const filteredUsers = useMemo(() => {
     const q = (searchTerm || '').toString().trim().toLowerCase();
@@ -68,6 +87,57 @@ export default function UsersManagement() {
       return matchesSearch && matchesRole && matchesStatus;
     });
   }, [users, searchTerm, selectedRoleFilter, selectedStatusFilter]);
+
+  // Compute per-user order counts and total spent using best-effort matching
+  const orderStats = useMemo(() => {
+    const map: Record<string, { count: number; total: number }> = {};
+    if (!orders || orders.length === 0) return map;
+
+    const normalize = (s: any) => (s === undefined || s === null) ? '' : String(s).toLowerCase().trim();
+
+    for (const o of orders) {
+      // determine key candidates on order
+      const orderUserId = o.UserId ?? o.userId ?? o.UserID ?? o.user_id ?? o.User ?? null;
+      const orderEmail = o.Email ?? o.email ?? o.CustomerEmail ?? o.Customer_Email ?? o.customerEmail ?? o.CustomerEmailAddress ?? null;
+      const orderPhone = o.Phone ?? o.phone ?? o.PhoneNumber ?? o.phoneNumber ?? null;
+      const orderName = o.CustomerName ?? o.Name ?? o.name ?? o.customerName ?? null;
+      const totalVal = Number(o.Total ?? o.TotalAmount ?? o.TotalPrice ?? o.TotalValue ?? o.Subtotal ?? 0) || 0;
+
+      // try to match by explicit user id first
+      if (orderUserId) {
+        const key = String(orderUserId);
+        map[key] = map[key] || { count: 0, total: 0 };
+        map[key].count += 1;
+        map[key].total += totalVal;
+        continue;
+      }
+
+      // fallback: try to match by email / phone / name against users list
+      let matched = false;
+      for (const u of users) {
+        const uid = String(u.Id ?? u.id ?? '');
+        if (!uid) continue;
+        const uEmail = normalize(u.Email ?? u.email ?? u.EmailAddress ?? u.emailAddress ?? '');
+        const uPhone = normalize(u.Phone ?? u.phone ?? u.PhoneNumber ?? u.phoneNumber ?? '');
+        const uName = normalize(u.Name ?? u.name ?? '');
+
+        if (orderEmail && uEmail && normalize(orderEmail) === uEmail) {
+          map[uid] = map[uid] || { count: 0, total: 0 };
+          map[uid].count += 1; map[uid].total += totalVal; matched = true; break;
+        }
+        if (!matched && orderPhone && uPhone && normalize(orderPhone) === uPhone) {
+          map[uid] = map[uid] || { count: 0, total: 0 };
+          map[uid].count += 1; map[uid].total += totalVal; matched = true; break;
+        }
+        if (!matched && orderName && uName && normalize(orderName) === uName) {
+          map[uid] = map[uid] || { count: 0, total: 0 };
+          map[uid].count += 1; map[uid].total += totalVal; matched = true; break;
+        }
+      }
+      // if not matched, skip
+    }
+    return map;
+  }, [orders, users]);
 
   const refresh = async () => {
     setLoading(true);
@@ -246,8 +316,15 @@ export default function UsersManagement() {
                         })()
                       )}
                     </td>
-                    <td className="py-3 px-4">—</td>
-                    <td className="py-3 px-4 font-semibold text-green-600">—</td>
+                    {(() => {
+                      const stats = orderStats[uid] || { count: 0, total: 0 };
+                      return (
+                        <>
+                          <td className="py-3 px-4">{stats.count > 0 ? stats.count : '—'}</td>
+                          <td className="py-3 px-4 font-semibold text-green-600">{stats.count > 0 ? `${Number(stats.total || 0).toFixed(2)} ₼` : '—'}</td>
+                        </>
+                      );
+                    })()}
                     <td className="py-3 px-4 text-gray-600">{formatDate(user.CreatedAt ?? user.Created_at ?? user.created_at)}</td>
                     <td className="py-3 px-4">
                       {isEditing ? (

@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import { useWishlist } from './WishlistContext';
 import { LanguageSelector } from './LanguageSelector';
 import { useTranslation } from 'react-i18next';
+import logoSrc from '../../images/logo/oyuncu.png';
 
 export default function Header() {
   const { t } = useTranslation();
@@ -131,9 +132,11 @@ export default function Header() {
   return (
     <header className="bg-white shadow-md sticky top-0 z-[9999]">
       {/* Top Header */}
-      <div className="bg-blue-600 text-white py-2 px-4">
+      <div className="bg-blue-600 text-white py-1 px-4">
         <div className="container mx-auto flex justify-between items-center">
-          <Link to="/" className="text-2xl font-bold">Oyunchu</Link>
+          <Link to="/" className="inline-flex items-center gap-3">
+            <img src={logoSrc} alt="Oyunchu" className="h-10 sm:h-10 object-contain transform scale-125" />
+          </Link>
 
           <div className="flex gap-6">
             <Link to="/campaigns" className="hover:text-orange-400 transition">{t("header.campaigns")}</Link>
@@ -161,7 +164,7 @@ export default function Header() {
       </div>
 
       {/* Bottom Header */}
-      <div className="bg-white py-3 px-4 border-b">
+      <div className="bg-white py-2 px-4 border-b">
         <div className="container mx-auto flex justify-between items-center">
           {/* Categories */}
           <div className="relative" ref={categoriesRef}>

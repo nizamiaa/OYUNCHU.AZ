@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { useTranslation } from 'react-i18next';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -20,50 +21,50 @@ export const branches = [
   {
     id: '28may',
     name: '28 May',
-    region: 'Baku',
-    address: 'Nəsimi r-nu, 28 May',
-    hours: '10:00–21:00',
-    lat: 40.378, // random-ish coords near Baku
-    lng: 49.828,
+    region: 'Bakı',
+    address: '{Azadlıq prospekti 54, (28 May m/st 2ci çıxışı)}',
+    hours: '10:00–20:00',
+    lat: 40.3792056,
+    lng: 49.8481658,
   },
   {
     id: 'xalqlar',
-    name: 'Xalqlar',
-    region: 'Baku',
-    address: 'Xalqlar prospekti',
-    hours: '10:00–21:00',
-    lat: 40.372,
-    lng: 49.835,
+    name: 'Xalqlar Dostluğu',
+    region: 'Bakı',
+    address: '9 Bəhruz Nuriyev, Bakı 1119',
+    hours: '10:00–20:00',
+    lat: 40.3977308,
+    lng: 49.9443103,
   },
   {
     id: 'sumqayit',
-    name: 'Sumqayit',
-    region: 'Sumqayit',
-    address: 'Sumqayit şəhəri, mərkəz',
-    hours: '10:00–21:00',
-    lat: 40.589,
-    lng: 49.657,
+    name: 'Sumqayıt',
+    region: 'Sumqayıt',
+    address: 'Heydər Əliyev 11',
+    hours: '10:00–20:00',
+    lat: 40.596621,
+    lng: 49.663531,
   },
   {
     id: 'gence',
-    name: 'Gence',
-    region: 'Gence',
-    address: 'Gəncə şəhəri, mərkəz',
-    hours: '10:00–21:00',
-    lat: 40.681,
-    lng: 46.363,
+    name: 'Gəncə',
+    region: 'Gəncə',
+    address: 'Pərviz Səmədov 60b',
+    hours: '10:00–20:00',
+    lat: 40.6769025,
+    lng: 46.3460462,
   },
 ];
 
 export default function BranchesPage() {
+  const { t } = useTranslation();
   const regions = useMemo(() => {
     const set = new Set(branches.map(b => b.region));
-    return ['All', ...Array.from(set)];
+    return [t('all'), ...Array.from(set)];
   }, []);
 
-  const [activeRegion, setActiveRegion] = useState<string>('All');
-  const filtered = useMemo(() => (activeRegion === 'All' ? branches : branches.filter(b => b.region === activeRegion)), [activeRegion]);
-
+  const [activeRegion, setActiveRegion] = useState<string>(t('all'));
+  const filtered = useMemo(() => (activeRegion === t('all') ? branches : branches.filter(b => b.region === activeRegion)), [activeRegion]);
   // view is controlled by FitBounds only to avoid double-updates
 
   function FitBounds({ points }: { points: { lat: number; lng: number }[] }) {
@@ -82,7 +83,7 @@ export default function BranchesPage() {
 
   return (
     <div className="container mx-auto p-6">
-      <h2 className="text-xl font-semibold mb-4">Mağazalarımız</h2>
+      <h2 className="text-xl font-semibold mb-4">{t('branchesPage.title')}</h2>
 
       <div className="bg-white rounded shadow mb-6 p-4">
         <div style={{ height: 420 }}>
@@ -107,7 +108,7 @@ export default function BranchesPage() {
                       rel="noreferrer"
                       className="text-blue-600 text-sm underline"
                     >
-                      Xəritədə aç
+                      {t('openInMap')}
                     </a>
                   </div>
                 </Popup>
@@ -136,7 +137,7 @@ export default function BranchesPage() {
           <div key={b.id} className="bg-white rounded border p-4">
             <div className="font-semibold mb-1">{b.name}</div>
             <div className="text-sm text-gray-600 mb-2">{b.address}</div>
-            <div className="text-sm text-green-600">İş saatları: {b.hours}</div>
+            <div className="text-sm text-green-600">{t('branchesPage.hours')}: {b.hours}</div>
           </div>
         ))}
       </div>

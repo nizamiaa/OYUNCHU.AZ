@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from 'react-router-dom';
 import { useCart, CartItem } from "../components/CartContext";
+import { useTranslation } from 'react-i18next';
 
 function QtyControls({ qty, onChange }: { qty: number; onChange: (n: number) => void }) {
   return (
@@ -25,6 +26,7 @@ function QtyControls({ qty, onChange }: { qty: number; onChange: (n: number) => 
 export default function CartPage() {
   const { items, totalPrice, removeFromCart, updateQty, selectedIds, toggleSelect, selectAll, clearSelection, selectedItems, selectedTotal } = useCart();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const allSelected = useMemo(() => items.length > 0 && selectedIds.length === items.length, [items, selectedIds]);
 
@@ -55,9 +57,9 @@ export default function CartPage() {
       <div className="p-8">
         <div className="max-w-6xl mx-auto bg-white rounded-lg p-12 text-center border">
           <div className="mb-6 text-gray-400">(icon)</div>
-          <h2 className="text-2xl font-semibold mb-2">Səbətində məhsul yoxdur</h2>
-          <p className="text-gray-500 mb-6">İstədiyin məhsulu səbətinə əlavə et.</p>
-          <a href="/" className="inline-block px-8 py-3 border rounded-lg">Əsas səhifə</a>
+          <h2 className="text-2xl font-semibold mb-2">{t('cartPage.emptyCartTitle')}</h2>
+          <p className="text-gray-500 mb-6">{t('cartPage.emptyCartMessage')}</p>
+          <a href="/" className="inline-block px-8 py-3 border rounded-lg">{t('cartPage.goHome')}</a>
         </div>
       </div>
     );
@@ -68,12 +70,12 @@ export default function CartPage() {
   return (
     <div className="p-8 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="col-span-2">
-        <a href="/" className="text-sm text-gray-500 mb-4">Ana səhifə &gt; Səbət</a>
+        <a href="/" className="text-sm text-gray-500 mb-4">{t('cartPage.breadcrumb')}</a>
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">Səbət ( Məhsul sayı: {displayCount} )</h1>
+          <h1 className="text-2xl font-bold">{t('cartPage.title')} ( {t('productCount')}: {displayCount} )</h1>
           <div className="flex gap-3">
-            <button onClick={toggleSelectAll} className="px-4 py-2 rounded-md border">Hamısını seç</button>
-            <button onClick={removeSelected} className="px-4 py-2 rounded-md border bg-gray-100">Seçilənləri sil</button>
+            <button onClick={toggleSelectAll} className="px-4 py-2 rounded-md border">{t('cartPage.selectAll')}</button>
+            <button onClick={removeSelected} className="px-4 py-2 rounded-md border bg-gray-100">{t('cartPage.removeSelected')}</button>
           </div>
         </div>
 
@@ -88,9 +90,6 @@ export default function CartPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-semibold">{item.name}</div>
-                    <div className="mt-2">
-                      <button className="px-3 py-1 rounded-md border text-sm">Zəmanət</button>
-                    </div>
                   </div>
                   <button onClick={() => removeFromCart(item.id)} className="text-gray-400">✕</button>
                 </div>
@@ -113,7 +112,7 @@ export default function CartPage() {
 
       <aside className="col-span-1">
           <div className="bg-white rounded-lg p-6 border space-y-4">
-          <div className="font-semibold">Məhsul sayı: <span className="float-right">{displayCount} əd.</span></div>
+          <div className="font-semibold">{t('productCount')}: <span className="float-right">{displayCount} {t('cartPage.unit')}.</span></div>
 
           <div className="text-sm text-gray-600">
             {selectedItems.map((it) => (
@@ -128,12 +127,12 @@ export default function CartPage() {
           </div>
 
           <div className="pt-2 border-t">
-            <div className="flex justify-between text-sm text-gray-600"><span>Ümumi məbləğ:</span><span>{selectedTotal.toFixed(2)} ₼</span></div>
-            <div className="flex justify-between text-sm text-gray-600"><span>Endirim məbləği:</span><span className="text-red-600">0.00 ₼</span></div>
-            <div className="flex justify-between text-lg font-semibold mt-2"><span>Yekun məbləğ:</span><span>{selectedTotal.toFixed(2)} ₼</span></div>
+            <div className="flex justify-between text-sm text-gray-600"><span>{t('cartPage.totalAmount')}:</span><span>{selectedTotal.toFixed(2)} ₼</span></div>
+            <div className="flex justify-between text-sm text-gray-600"><span>{t('cartPage.discountAmount')}:</span><span className="text-red-600">0.00 ₼</span></div>
+            <div className="flex justify-between text-lg font-semibold mt-2"><span>{t('cartPage.finalAmount')}:</span><span>{selectedTotal.toFixed(2)} ₼</span></div>
           </div>
 
-          <button onClick={() => navigate('/checkout')} className="w-full bg-pink-600 text-white py-3 rounded-lg">Sifarişi rəsmiləşdir</button>
+          <button onClick={() => navigate('/checkout')} className="w-full bg-pink-600 text-white py-3 rounded-lg">{t('cartPage.checkout')}</button>
         </div>
       </aside>
     </div>

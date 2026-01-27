@@ -1,0 +1,183 @@
+{
+    "languageSelector": {
+        "selectLanguage": "Выберите язык"
+    },
+
+    "price": "Цена",
+    "name": "Имя",
+    "loading": "Загрузка...",
+    "category": "Категория",
+    "sort": "Сортировать",
+    "price-asc": "Цена: от низкой к высокой",
+    "price-desc": "Цена: от высокой к низкой",
+    "price-range": "Ценовой диапазон",
+    "reset-filters": "Сбросить фильтры",
+    "addToCart": "Добавить в корзину",
+    "similarResults": "Похожие результаты",
+    "close": "Закрыть",
+    "openInMap": "Открыть на карте",
+    "all": "Все",
+    "productCount": "Количество товаров",
+    "Please enter a valid name and phone number": "Пожалуйста, введите действительное имя и номер телефона",
+    "Please select a branch": "Пожалуйста, выберите филиал",
+    "Please enter a city for delivery": "Пожалуйста, введите город для доставки",
+    "No products selected": "Нет выбранных товаров",
+    "Order successfully submitted": "Заказ успешно отправлен",
+    "Error occurred while submitting the order": "Произошла ошибка при отправке заказа",
+    "login": "Войти",
+    "password": "Пароль",
+    "dontHaveAccount": "Нет аккаунта?",
+    "register": "Регистрация",
+    "productNotFound": "Товар не найден",
+    "productAbout": "О товаре",
+    "reviews": "Отзывы",
+    "noReviewsYet": "Пока нет отзывов. Ваш отзыв будет полезен.",
+    "writeReview": "Написать отзыв",
+    "yourRating": "Ваша оценка",
+    "writeReview2": "Напишите свой отзыв... (необязательно)",
+    "submit": "Отправить",
+    "clear": "Очистить",
+    "featuredProducts": "Избранные товары",
+    "Error loading products": "Ошибка загрузки товаров",
+    "viewAll": "Просмотреть все",
+    "loginRemember": "Запомнить меня",
+
+    "header": {
+        "campaigns": "Кампании",
+        "affiliates": "Филиалы",
+        "login": "Войти",
+        "hello": "Здравствуйте",
+        "allCategories": "Все категории",
+        "searchPlaceholder": "Ищите консоли, игры, аксессуары...",
+        "noResultsFound": "Результаты не найдены",
+        "password": "Пароль",
+        "dontHaveAccount": "Нет аккаунта?",
+        "register": "Регистрация",
+        "alreadyHaveAccount": "Уже есть аккаунт?"
+    },
+
+    "authPromptModal": {
+        "authTitle": "Личный кабинет",
+        "authMessage": "Чтобы воспользоваться преимуществами личного кабинета, мы рекомендуем вам войти или зарегистрироваться.",
+        "addedTitle": "Товар добавлен в избранное",
+        "addedMessage": "Выбранный товар был добавлен в избранное."
+    },
+
+    "branchesPage": {
+        "title": "Наши магазины",
+        "hours": "Часы работы"
+    },
+
+    "campaignsPage": {
+        "title": "Кампании — Товары со скидкой",
+        "viewAll": "Просмотреть все товары"
+    },
+
+    "carouselSection": {
+        "playStationDescription": "Игровая консоль последнего поколения",
+        "gamesDescription": "Воплощайте свои мечты",
+        "gamesDescription2": "Играйте где угодно, в любое время",
+        "premiumGamingExperience": "Премиальный игровой опыт",
+        "shopNow": "Купить сейчас",
+        "playStation5": "PlayStation 5",
+        "games": "Игры",
+        "nintendoSwitch": "Nintendo Switch",
+        "gamingControllers": "Игровые контроллеры"
+    },
+
+    "cartPage": {
+        "emptyCartTitle": "В вашей корзине нет товаров",
+        "emptyCartMessage": "Добавьте желаемые товары в корзину.",
+        "goHome": "На главную",
+        "breadcrumb": "Главная > Корзина",
+        "title": "Корзина",
+        "selectAll": "Выбрать все",
+        "removeSelected": "Удалить выбранные",
+        "unit": "шт.",
+        "totalAmount": "Общая сумма",
+        "discountAmount": "Сумма скидки",
+        "finalAmount": "Итоговая сумма",
+        "checkout": "Перейти к оформлению заказа"
+    },
+
+    "categories": {
+        "playStation5": "PlayStation 5",
+        "accessories": "Аксессуары",
+        "console": "Консоль",
+        "games": "Игры",
+        "bestSellers": "Лидеры продаж",
+        "specialOffer": "Специальное предложение",
+        "specialOfferDetails": "Скидки до 50% на выбранные товары"
+    },
+
+    "checkout": {
+        "title": "Оформление заказа",
+        "personalInformation": "Личная информация",
+        "name": "Имя",
+        "surname": "Фамилия",
+        "phone": "Телефон",
+        "deliveryMethod": "Способ доставки",
+        "courierDelivery": "Курьерская доставка",
+        "branchPickup": "Самовывоз из магазина",
+        "city": "Город",
+        "enterCity": "Введите название города",
+        "address": "Адрес",
+        "selectFromStores": "Выбрать из магазинов",
+        "paymentMethod": "Способ оплаты",
+        "instorePayment": "Оплата в магазине",
+        "cartToCartPayment": "Оплата с карты на карту",
+        "cardPayment": "Оплата картой",
+        "cashPayment": "Оплата наличными",
+        "completeOrder": "Завершить заказ",
+        "productCount": "Количество товаров"
+    },
+
+    "footer": {
+        "title": "Всё, что связано с миром игр",
+        "allRightsReserved": "Все права защищены",
+        "quickLinks": {
+            "title": "Быстрые ссылки",
+            "aboutUs": "О нас",
+            "contact": "Контакты",
+            "faq": "Часто задаваемые вопросы",
+            "shippingInfo": "Информация о доставке"
+        },
+        "newsletter": {
+            "title": "Рассылка новостей",
+            "subscribe": "Подпишитесь на эксклюзивные предложения!",
+            "cta": "Подписаться",
+            "alreadySubscribed": "Вы уже подписаны"
+        }
+    },
+
+    "productDetail": {
+        "shortInfo": "Краткая информация",
+        "oldPrice": "Старая цена",
+        "discount": "Скидка"
+    },
+
+    "registers": {
+        "title": "Регистрация",
+        "invalidEmail": "Пожалуйста, введите действительный адрес электронной почты.",
+        "passwordRequirements": "Пароль должен быть не менее 8 символов и включать заглавные и строчные буквы, цифру и специальный символ.",
+        "passwordsDoNotMatch": "Пароли не совпадают.",
+        "registrationFailed": "Регистрация не удалась. Пожалуйста, попробуйте снова.",
+        "surname": "Фамилия",
+        "name": "Имя",
+        "email": "Электронная почта",
+        "confirmPassword": "Подтвердите пароль",
+        "alreadyHaveAccount": "Уже есть аккаунт?",
+        "login": "Войти",
+        "createAccount": "Создать аккаунт"
+    },
+
+    "wishlist": {
+        "title": "Список желаемого",
+        "emptyMessage": "Ваш список желаемого пуст. Добавьте любимые товары и начните покупки.",
+        "emptyDescription": "Вы можете собирать здесь свои любимые товары.",
+        "viewProducts": "Просмотреть товары",
+        "categories": "Категории",
+        "cart": "Корзина",
+        "card": "Переместить в корзину"
+    }
+}

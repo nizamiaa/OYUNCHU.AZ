@@ -1,12 +1,15 @@
-import { Search, Heart, ShoppingCart, Menu, User, Globe, LogOut } from 'lucide-react';
+import { Search, Heart, ShoppingCart, Menu, User, LogOut } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCart } from "../components/CartContext";
 import { useAuth } from './AuthContext';
 import { useWishlist } from './WishlistContext';
+import { LanguageSelector } from './LanguageSelector';
+import { useTranslation } from 'react-i18next';
 
 export default function Header() {
+  const { t } = useTranslation();
   const { totalQty } = useCart();
   const { items: wishlistItems } = useWishlist();
   const categories = [
@@ -133,14 +136,14 @@ export default function Header() {
           <Link to="/" className="text-2xl font-bold">Oyunchu</Link>
 
           <div className="flex gap-6">
-            <Link to="/campaigns" className="hover:text-orange-400 transition">Campaigns</Link>
-            <Link to="/branches" className="hover:text-orange-400 transition">Affiliates</Link>
+            <Link to="/campaigns" className="hover:text-orange-400 transition">{t("header.campaigns")}</Link>
+            <Link to="/branches" className="hover:text-orange-400 transition">{t("header.affiliates")}</Link>
           </div>
 
           <div className="flex items-center gap-4">
             {auth.isAuthenticated && auth.user ? (
               <div className="flex items-center gap-3">
-                <div className="text-sm">Hello, <span className="font-semibold">{auth.user.name}</span></div>
+                <div className="text-sm">{t("header.hello")}, <span className="font-semibold">{auth.user.name}</span></div>
                 <button onClick={async () => { await auth.logout(); navigate('/'); }} className="flex items-center gap-1 hover:text-orange-400 transition">
                   <LogOut size={18} />
                 </button>
@@ -148,14 +151,11 @@ export default function Header() {
             ) : (
               <Link to="/login" className="flex items-center gap-2 hover:text-orange-400 transition">
                 <User size={20} />
-                <span>Login</span>
+                <span>{t("header.login")}</span>
               </Link>
             )}
 
-            <button className="flex items-center gap-2 hover:text-orange-400 transition">
-              <Globe size={20} />
-              <span>EN</span>
-            </button>
+            <LanguageSelector />
           </div>
         </div>
       </div>
@@ -167,13 +167,13 @@ export default function Header() {
           <div className="relative" ref={categoriesRef}>
             <button onClick={() => setCategoriesVisible(v => !v)} className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition">
               <Menu size={20} />
-              <span>All Categories</span>
+              <span>{t("header.allCategories")}</span>
             </button>
 
             {categoriesVisible && (
               <div className="absolute top-full left-0 mt-1 bg-white shadow-xl rounded-lg w-64 py-2 border z-50">
                 <button type="button" onClick={() => { navigate('/products'); setCategoriesVisible(false); }} className="block w-full text-left px-4 py-2 font-medium hover:bg-blue-50 hover:text-blue-600 transition">
-                  Butun mehsullar
+                  {t("header.allCategories")}
                 </button>
                 <div className="border-t my-1" />
                 {categories.map((category, index) => (
@@ -201,7 +201,7 @@ export default function Header() {
           <div className="flex-1 mx-8 relative" ref={searchRef}>
             <input
               type="text"
-              placeholder="Search for consoles, games, accessories..."
+              placeholder={t("header.searchPlaceholder")}
               className="w-full px-4 py-2 pr-12 border-2 border-blue-300 rounded-lg focus:border-blue-500 focus:outline-none"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -236,14 +236,14 @@ export default function Header() {
                         </div>
 
                         <div className="text-right">
-                          <div className="text-sm text-gray-500">Price</div>
+                          <div className="text-sm text-gray-500">{t("price")}</div>
                           <div className="font-semibold text-blue-600">{p.price ? Number(p.price).toFixed(2) + ' ₼' : '-'}</div>
                         </div>
                       </div>
                     </Link>
                   ))
                 ) : (
-                  <div className="px-4 py-2 text-gray-500">No results found</div>
+                  <div className="px-4 py-2 text-gray-500">{t("header.noResultsFound")}</div>
                 )}
               </div>
             )}
@@ -280,7 +280,7 @@ export default function Header() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-md" onClick={() => setModal({ ...modal, open: false })}/>
           <div className="relative z-10 bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">{modal.mode === 'login' ? 'Login' : 'Register'}</h3>
+              <h3 className="text-lg font-semibold">{modal.mode === 'login' ? t('header.login') : t('header.register')}</h3>
               <button className="text-gray-500 hover:text-black" onClick={() => setModal({ ...modal, open: false })}>✕</button>
             </div>
 
@@ -291,21 +291,21 @@ export default function Header() {
                   <input type="email" required className="w-full px-3 py-2 border rounded" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Password</label>
+                  <label className="block text-sm font-medium mb-1">{t("header.password")}</label>
                   <input type="password" required className="w-full px-3 py-2 border rounded" />
                 </div>
-                <button className="w-full bg-blue-600 text-white py-2 rounded">Sign in</button>
+                <button className="w-full bg-blue-600 text-white py-2 rounded">{t("header.login")}</button>
                 <p className="text-sm text-center">
-                  Don&apos;t have an account?{' '}
+                  {t("header.dontHaveAccount")}{' '}
                   <button type="button" className="text-blue-600 underline" onClick={() => setModal({ open: true, mode: 'register' })}>
-                    Register
+                    {t("header.register")}
                   </button>
                 </p>
               </form>
             ) : (
               <form className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Name</label>
+                  <label className="block text-sm font-medium mb-1">{t("name")}</label>
                   <input type="text" required className="w-full px-3 py-2 border rounded" />
                 </div>
                 <div>
@@ -313,14 +313,14 @@ export default function Header() {
                   <input type="email" required className="w-full px-3 py-2 border rounded" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Password</label>
+                  <label className="block text-sm font-medium mb-1">{t("header.password")}</label>
                   <input type="password" required className="w-full px-3 py-2 border rounded" />
                 </div>
-                <button className="w-full bg-blue-600 text-white py-2 rounded">Create account</button>
+                <button className="w-full bg-blue-600 text-white py-2 rounded">{t("header.register")}</button>
                 <p className="text-sm text-center">
-                  Already have an account?{' '}
+                  {t("header.alreadyHaveAccount")}{' '}
                   <button type="button" className="text-blue-600 underline" onClick={() => setModal({ open: true, mode: 'login' })}>
-                    Login
+                    {t("header.login")}
                   </button>
                 </p>
               </form>

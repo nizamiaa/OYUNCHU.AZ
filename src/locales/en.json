@@ -1,0 +1,183 @@
+{
+    "languageSelector": {
+        "selectLanguage": "Select language"
+    },
+
+    "price": "Price",
+    "name": "Name",
+    "loading": "Loading...",
+    "category": "Category",
+    "sort": "Sort",
+    "price-asc": "Price: Low to High",
+    "price-desc": "Price: High to Low",
+    "price-range": "Price Range",
+    "reset-filters": "Reset Filters",
+    "addToCart": "Add to Cart",
+    "similarResults": "Similar Results",
+    "close": "Close",
+    "openInMap": "Open in Map",
+    "all": "All",
+    "productCount": "Product Count",
+    "Please enter a valid name and phone number": "Please enter a valid name and phone number",
+    "Please select a branch": "Please select a branch",
+    "Please enter a city for delivery": "Please enter a city for delivery",
+    "No products selected": "No products selected",
+    "Order successfully submitted": "Order successfully submitted",
+    "Error occurred while submitting the order": "Error occurred while submitting the order",
+    "login": "Login",
+    "password": "Password",
+    "dontHaveAccount": "Don't have an account?",
+    "register": "Register",
+    "productNotFound": "Product not found",
+    "productAbout": "Product About",
+    "reviews": "Reviews",
+    "noReviewsYet": "No reviews yet. Your review will be helpful.",
+    "writeReview": "Write a Review",
+    "yourRating": "Your Rating",
+    "writeReview2": "Write your review... (optional)",
+    "submit": "Submit",
+    "clear": "Clear",
+    "featuredProducts": "Featured Products",
+    "Error loading products": "Error loading products",
+    "viewAll": "View All",
+    "loginRemember": "Remember me",
+
+    "header": {
+        "campaigns": "Campaigns",
+        "affiliates": "Affiliates",
+        "login": "Login",
+        "hello": "Hello",
+        "allCategories": "All Categories",
+        "searchPlaceholder": "Search for consoles, games, accessories...",
+        "noResultsFound": "No results found",
+        "password": "Password",
+        "dontHaveAccount": "Don't have an account?",
+        "register": "Register",
+        "alreadyHaveAccount": "Already have an account?"
+    },
+
+    "authPromptModal": {
+        "authTitle": "Personal Account",
+        "authMessage": "To enjoy the benefits of a personal account, we recommend you to log in or register.",
+        "addedTitle": "Product Added to Favorites",
+        "addedMessage": "The selected product has been added to favorites."
+    },
+
+    "branchesPage": {
+        "title": "Our Stores",
+        "hours": "Working Hours"
+    },
+
+    "campaignsPage": {
+        "title": "Campaigns — Discounted Products",
+        "viewAll": "View All Products"
+    },
+
+    "carouselSection": {
+        "playStationDescription": "Latest generation gaming console",
+        "gamesDescription": "Power your dreams",
+        "gamesDescription2": "Play anywhere, anytime",
+        "premiumGamingExperience": "Premium gaming experience",
+        "shopNow": "Shop Now",
+        "playStation5": "PlayStation 5",
+        "games": "Games",
+        "nintendoSwitch": "Nintendo Switch",
+        "gamingControllers": "Gaming Controllers"
+    },
+
+    "cartPage": {
+        "emptyCartTitle": "Your cart is empty",
+        "emptyCartMessage": "Add your desired products to the cart.",
+        "goHome": "Go to Home",
+        "breadcrumb": "Home > Cart",
+        "title": "Cart",
+        "selectAll": "Select All",
+        "removeSelected": "Remove Selected",
+        "unit": "pcs",
+        "totalAmount": "Total Amount",
+        "discountAmount": "Discount Amount",
+        "finalAmount": "Final Amount",
+        "checkout": "Proceed to Checkout"
+    },
+
+    "categories": {
+        "playStation5": "PlayStation 5",
+        "accessories": "Accessories",
+        "console": "Console",
+        "games": "Games",
+        "bestSellers": "Best sellers",
+        "specialOffer": "Special offer",
+        "specialOfferDetails": "Up to 50% OFF on selected items"
+    },
+
+    "checkout": {
+        "title": "Checkout",
+        "personalInformation": "Personal Information",
+        "name": "Name",
+        "surname": "Surname",
+        "phone": "Phone",
+        "deliveryMethod": "Delivery Method",
+        "courierDelivery": "Courier",
+        "branchPickup": "Branch Pickup",
+        "city": "City",
+        "enterCity": "Enter city name",
+        "address": "Address",
+        "selectFromStores": "Select from Stores",
+        "paymentMethod": "Payment Method",
+        "instorePayment": "In-store Payment",
+        "cartToCartPayment": "Card to Card",
+        "cardPayment": "Card Payment",
+        "cashPayment": "Cash on Delivery",
+        "completeOrder": "Complete Order",
+        "productCount": "Product Count"
+    },
+
+    "footer": {
+        "title": "Everything related to the gaming world",
+        "allRightsReserved": "All rights reserved",
+        "quickLinks": {
+            "title": "Quick Links",
+            "aboutUs": "About Us",
+            "contact": "Contact",
+            "faq": "FAQ",
+            "shippingInfo": "Shipping Info"
+        },
+        "newsletter": {
+            "title": "Newsletter",
+            "subscribe": "Subscribe for exclusive deals!",
+            "cta": "Subscribe",
+            "alreadySubscribed": "You are already subscribed"
+        }
+    },
+
+    "productDetail": {
+        "shortInfo": "Short Info",
+        "oldPrice": "Old Price",
+        "discount": "Discount"
+    },
+
+    "registers": {
+        "title": "Register",
+        "invalidEmail": "Please enter a valid email address.",
+        "passwordRequirements": "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.",
+        "passwordsDoNotMatch": "Passwords do not match.",
+        "registrationFailed": "Registration failed. Please try again.",
+        "surname": "Surname",
+        "name": "Name",
+        "email": "Email",
+        "confirmPassword": "Confirm Password",
+        "alreadyHaveAccount": "Already have an account?",
+        "login": "Login",
+        "createAccount": "Create Account"
+    },
+
+    "wishlist": {
+        "title": "Wishlist",
+        "emptyMessage": "Your wishlist is empty. Add your favorite products and start shopping.",
+        "emptyDescription": "You can collect your favorite products here.",
+        "viewProducts": "View Products",
+        "categories": "Categories",
+        "cart": "Cart",
+        "card": "Move to Cart"
+    }
+}

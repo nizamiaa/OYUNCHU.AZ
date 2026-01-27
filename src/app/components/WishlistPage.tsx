@@ -4,25 +4,29 @@ import { ShoppingCart, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCart } from './CartContext';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { useTranslation } from 'react-i18next';
 
 export default function WishlistPage(){
   const { items, remove } = useWishlist();
   const { addToCart } = useCart();
+
+  const { t } = useTranslation();
+
   return (
     <div className="p-6">
-      <h2 className="text-3xl font-bold mb-4">Favorilər</h2>
+      <h2 className="text-3xl font-bold mb-4">{t('wishlist.title')}</h2>
 
       {items.length === 0 ? (
         <div className="mt-12 text-center">
           <div className="mx-auto w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center mb-4">
             <Heart size={40} className="text-gray-400" />
           </div>
-          <h3 className="text-xl font-semibold mb-2">Hələ heç bir məhsul favorilərə əlavə edilməyib</h3>
-          <p className="text-gray-600 mb-4">Sevdiyiniz məhsulları burada toplaya bilərsiniz.</p>
+          <h3 className="text-xl font-semibold mb-2">{t('wishlist.emptyMessage')}</h3>
+          <p className="text-gray-600 mb-4">{t('wishlist.emptyDescription')}</p>
           <div className="flex justify-center gap-3">
-            <Link to="/products" className="inline-block py-2 px-4 bg-blue-600 text-white rounded-lg">Məhsullara bax</Link>
-            <Link to="/" className="inline-block py-2 px-4 border rounded-lg">Kategoriyalar</Link>
-            <Link to="/checkout/cart" className="inline-block py-2 px-4 border rounded-lg">Səbət</Link>
+            <Link to="/products" className="inline-block py-2 px-4 bg-blue-600 text-white rounded-lg">{t('wishlist.viewProducts')}</Link>
+            <Link to="/" className="inline-block py-2 px-4 border rounded-lg">{t('wishlist.categories')}</Link>
+            <Link to="/checkout/cart" className="inline-block py-2 px-4 border rounded-lg">{t('wishlist.cart')}</Link>
           </div>
         </div>
       ) : (
@@ -63,7 +67,7 @@ export default function WishlistPage(){
                         }
                       }}
                       className="text-sm bg-blue-600 text-white px-3 py-1 rounded-md"
-                    >Səbətə köçür</button>
+                    >{t('wishlist.card')}</button>
                   </div>
                 </div>
               </div>

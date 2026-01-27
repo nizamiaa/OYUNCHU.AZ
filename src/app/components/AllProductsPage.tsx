@@ -3,8 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, Heart, Star } from 'lucide-react';
 import { useWishlist } from './WishlistContext';
 import { useAuth } from './AuthContext';
-import AuthPromptModal from './AuthPromptModal';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { useTranslation } from 'react-i18next';
 import { useCart } from './CartContext';
 
 type Product = {
@@ -43,6 +43,7 @@ export default function AllProductsPage() {
   const { addToCart } = useCart();
   const { add: addToWishlist, remove: removeFromWishlist, contains: inWishlist } = useWishlist();
   const auth = useAuth();
+  const { t } = useTranslation();
   const [modalOpen, setModalOpen] = React.useState(false);
 
 
@@ -198,7 +199,7 @@ export default function AllProductsPage() {
 
 
 
-  if (loading) return <div className="container mx-auto p-6">Loading products...</div>;
+  if (loading) return <div className="container mx-auto p-6">{t('loading')}</div>;
   if (error) return <div className="container mx-auto p-6 text-red-600">Error: {error}</div>;
 
   // Derive page title from query params so header becomes dynamic
@@ -234,7 +235,7 @@ export default function AllProductsPage() {
       {/* Controls: Sort + Price Range */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-gray-600">Kateqoriya</label>
+          <label className="text-sm font-medium text-gray-600">{t('category')}</label>
           <select
             value={selectedCategory}
             onChange={(e) => {
@@ -248,7 +249,7 @@ export default function AllProductsPage() {
             }}
             className="border rounded-full px-4 py-2 text-sm"
           >
-            <option value="">Kateqoriya</option>
+            <option value="">{t('category')}</option>
             {categoriesList.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
@@ -256,7 +257,7 @@ export default function AllProductsPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-gray-600">Sırala</label>
+          <label className="text-sm font-medium text-gray-600">{t('sort')}</label>
           <select
             value={sortOption}
             onChange={(e) => {
@@ -268,14 +269,14 @@ export default function AllProductsPage() {
             }}
             className="border rounded-full px-4 py-2 text-sm"
           >
-            <option value="" disabled>Sırala</option>
-            <option value="price-asc">Əvvəlcə ucuz</option>
-            <option value="price-desc">Əvvəlcə bahalı</option>
+            <option value="" disabled>{t('sort')}</option>
+            <option value="price-asc">{t('price-asc')}</option>
+            <option value="price-desc">{t('price-desc')}</option>
           </select>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="text-sm text-gray-600">Qiymət aralığı</div>
+          <div className="text-sm text-gray-600">{t('price-range')}</div>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -314,13 +315,13 @@ export default function AllProductsPage() {
             }}
             className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 text-sm"
           >
-            Filtrləri sıfırla
+            {t('reset-filters')}
           </button>
         </div>
       </div>
 
       {products.length === 0 ? (
-        <div className="text-gray-600">No products found.</div>
+        <div className="text-gray-600">{t('header.noResultsFound')}</div>
       ) : (
         (() => {
           const params = new URLSearchParams(location.search);
@@ -442,7 +443,7 @@ export default function AllProductsPage() {
                   className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-orange-500 transition flex items-center justify-center gap-2 font-semibold"
                 >
                   <ShoppingCart size={20} />
-                  Add to Cart
+                  {t('addToCart')}
                 </button>
               </div>
             </div>
@@ -451,7 +452,7 @@ export default function AllProductsPage() {
             {/* Similar results section */}
             {similarProducts && similarProducts.length > 0 && (
               <div className="mt-10">
-                <h2 className="text-2xl font-semibold mb-4">Oxşar nəticələr</h2>
+                <h2 className="text-2xl font-semibold mb-4">{t('similarResults')}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   {similarProducts.map(sp => (
                     <div key={sp.id} className="bg-white rounded-lg shadow-sm p-3 cursor-pointer" onClick={() => navigate(`/products/${sp.id}`)}>

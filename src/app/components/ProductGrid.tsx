@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import AuthPromptModal from './AuthPromptModal';
 import axios from 'axios';
 import React, { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type Product = {
   id: number;
@@ -29,6 +30,8 @@ export default function ProductGrid() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const { t } = useTranslation();
 
   useEffect(() => {
     const load = async () => {
@@ -107,15 +110,15 @@ export default function ProductGrid() {
 
 
 
-  if (loading) return <div className="mb-8">Loading featured products...</div>;
-  if (error) return <div className="mb-8 text-red-600">Error loading products: {error}</div>;
+  if (loading) return <div className="mb-8">{t('loading')}</div>;
+  if (error) return <div className="mb-8 text-red-600">{t('Error loading products')}: {error}</div>;
 
   return (
     <div className="mb-8">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-blue-900">Featured Products</h2>
+        <h2 className="text-3xl font-bold text-blue-900">{t('featuredProducts')}</h2>
         <Link to="/products" className="text-blue-600 hover:text-orange-500 font-semibold transition">
-          View All →
+          {t('viewAll')} →
         </Link>
       </div>
 
@@ -197,7 +200,7 @@ export default function ProductGrid() {
                 className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-orange-500 transition flex items-center justify-center gap-2 font-semibold"
               >
                 <ShoppingCart size={20} />
-                Add to Cart
+                {t('addToCart')}
               </button>
 
             </div>

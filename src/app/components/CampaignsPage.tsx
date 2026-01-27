@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 
@@ -17,6 +18,7 @@ export default function CampaignsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const load = async () => {
@@ -44,14 +46,14 @@ export default function CampaignsPage() {
     load();
   }, []);
 
-  if (loading) return <div className="p-6">Loading campaigns...</div>;
+  if (loading) return <div className="p-6">{t('loading')}</div>;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
 
   return (
     <div className="container mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-blue-900">Campaigns — Discounted Products</h1>
-        <Link to="/products" className="text-blue-600 hover:text-orange-500">View all products</Link>
+        <h1 className="text-2xl font-bold text-blue-900">{t('campaignsPage.title')}</h1>
+        <Link to="/products" className="text-blue-600 hover:text-orange-500">{t('campaignsPage.viewAll')}</Link>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

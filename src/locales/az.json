@@ -1,0 +1,185 @@
+{
+    "languageSelector": {
+        "selectLanguage": "Dil seçin"
+    },
+
+    "price": "Qiymət",
+    "name": "Ad",
+    "loading": "Yüklənir...",
+    "category": "Kateqoriya",
+    "sort": "Sırala",
+    "price-asc": "Əvvəlcə ucuz",
+    "price-desc": "Əvvəlcə bahalı",
+    "price-range": "Qiymət aralığı",
+    "reset-filters": "Filtrləri sıfırla",
+    "addToCart": "Səbətə əlavə et",
+    "similarResults": "Oxşar nəticələr",
+    "close": "Bağla",
+    "openInMap": "Xəritədə aç",
+    "all": "Hamısı",
+    "productCount": "Məhsul sayı",
+    "Please enter a valid name and phone number": "Zəhmət olmasa ad və düzgün telefon nömrəsi daxil edin",
+    "Please select a branch": "Zəhmət olmasa filial seçin",
+    "Please enter a city for delivery": "Zəhmət olmasa çatdırılma üçün şəhər daxil edin",
+    "No products selected": "Heç bir məhsul seçilməyib",
+    "Order successfully submitted": "Sifariş uğurla göndərildi",
+    "Error occurred while submitting the order": "Sifarişi göndərərkən xəta oldu",
+    "login": "Daxil ol",
+    "password": "Şifrə",
+    "dontHaveAccount": "Hesabınız yoxdur?",
+    "register": "Qeydiyyat",
+    "productNotFound": "Məhsul tapılmadı",
+    "productAbout": "Məhsul haqqında",
+    "reviews": "Rəylər",
+    "noReviewsYet": "Hələ heç bir rəy yoxdur. Sizin rəyiniz faydalı olacaq.",
+    "writeReview": "Rəy yaz",
+    "yourRating": "Sizin qiymətiniz",
+    "writeReview2": "Rəyinizi yazın... (isteğe bağlı)",
+    "submit": "Göndər",
+    "clear": "Təmizlə",
+    "featuredProducts": "Seçilmiş Məhsullar",
+    "Error loading products": "Məhsullar yüklənərkən xəta baş verdi",
+    "viewAll": "Hamısına bax",
+    "loginRemember": "Məni yadda saxla",
+
+    "header": {
+        "campaigns": "Kampaniyalar",
+        "affiliates": "Filiallar",
+        "login": "Daxil ol",
+        "hello": "Salam",
+        "allCategories": "Bütün Kateqoriyalar",
+        "searchPlaceholder": "Konsollar, oyunlar, aksesuarlar axtarın...",
+        "noResultsFound": "Nəticə tapılmadı",
+        "password": "Şifrə",
+        "dontHaveAccount": "Hesabınız yoxdur?",
+        "register": "Qeydiyyat",
+        "alreadyHaveAccount": "Hesabınız var?"
+    },
+
+    "authPromptModal": {
+        "authTitle": "Şəxsi hesab",
+        "authMessage": "Şəxsi hesabın üstünlüklərindən yararlanmaq üçün daxil olmaq və ya qeydiyyatdan keçməyinizi tövsiyə edirik.",
+        "addedTitle": "Məhsul favorilərə əlavə edildi",
+        "addedMessage": "Seçilmiş məhsul favorilərə əlavə edildi."
+    },
+
+    "branchesPage": {
+        "title": "Mağazalarımız",
+        "hours": "İş saatları"
+    },
+
+    "campaignsPage": {
+        "title": "Kampaniyalar — Endirimli Məhsullar",
+        "viewAll": "Bütün məhsullara bax"
+    },
+
+    "carouselSection": {
+        "playStationDescription": "Ən son nəsil oyun konsolu",
+        "gamesDescription": "Arzularınızı gücləndirin",
+        "gamesDescription2": "Hər yerdə, hər zaman oynayın",
+        "premiumGamingExperience": "Premium oyun təcrübəsi",
+        "shopNow": "İndi alış-veriş et",
+        "playStation5": "PlayStation 5",
+        "games": "Oyunlar",
+        "nintendoSwitch": "Nintendo Switch",
+        "gamingControllers": "Oyun Kontrollerləri"
+    },
+
+    "cartPage": {
+        "emptyCartTitle": "Səbətiniz boşdur",
+        "emptyCartMessage": "Sevdiyiniz məhsulları əlavə edin və alış-verişə başlayın.",
+        "goHome": "Əsas səhifəyə qayıt",
+        "breadcrumb": "Əsas səhifə > Səbət",
+        "title": "Səbət",
+        "selectAll": "Hamısını seç",
+        "removeSelected": "Seçilənləri sil",
+        "unit": "əd.",
+        "totalAmount": "Ümumi məbləğ",
+        "discountAmount": "Endirim məbləği",
+        "finalAmount": "Yekun məbləğ",
+        "checkout": "Sifarişi rəsmiləşdir"
+    },
+
+    "categories": {
+        "playStation5": "PlayStation 5",
+        "accessories": "Aksesuarlar",
+        "console": "Konsol",
+        "games": "Oyunlar",
+        "bestSellers": "Ən çox satılanlar",
+        "specialOffer": "Xüsusi təklif",
+        "specialOfferDetails": "Seçilmiş məhsullarda 50%-dək endirim"
+    },
+
+    "checkout": {
+        "title": "Sifarişin rəsmiləşdirilməsi",
+        "personalInformation": "Şəxsi məlumat",
+        "name": "Ad",
+        "surname": "Soyad",
+        "phone": "Nömrə",
+        "deliveryMethod": "Çatdırılma üsulu",
+        "courierDelivery": "Kuryer",
+        "branchPickup": "Filialdan götürmə",
+        "city": "Şəhər",
+        "enterCity": "Şəhər adını daxil edin",
+        "address": "Ünvan",
+        "selectFromStores": "Mağazalardan seç",
+        "paymentMethod": "Ödəniş üsulu",
+        "instorePayment": "Mağazada ödəniş",
+        "cartToCartPayment": "Kartdan karta",
+        "cardPayment": "Kartla ödəniş",
+        "cashPayment": "Qapıda ödəniş",
+        "completeOrder": "Sifarişi tamamla",
+        "productCount": "Məhsul sayı"
+    },
+
+    "footer": {
+        "title": "Oyun dünyasına aid hər şey",
+        "allRightsReserved": "Bütün hüquqlar qorunur",
+        "quickLinks": {
+            "title": "Tez Əlaqələr",
+            "aboutUs": "Haqqımızda",
+            "contact": "Əlaqə",
+            "faq": "Tez-tez verilən suallar",
+            "shippingInfo": "Çatdırılma məlumatı"
+        },
+        "newsletter": {
+            "title": "Abunəlik",
+            "subscribe": "Eksklüziv təkliflər üçün abunə olun!",
+            "cta": "Abunə ol",
+            "alreadySubscribed": "Siz artıq abunə olmusunuz"
+        }
+
+    },
+
+    "productDetail": {
+        "shortInfo": "Qısa məlumat",
+        "oldPrice": "Köhnə qiymət",
+        "discount": "Endirim"
+    },
+
+    "registers": {
+        "title": "Qeydiyyat",
+        "nameTooShort": "Ad çox qısadır",
+        "invalidEmail": "Email formatı düzgün deyil",
+        "passwordRequirements": "Şifrə ən azı 8 simvol, 1 böyük hərf və 1 rəqəm içerməlidir",
+        "passwordsDoNotMatch": "Şifrələr uyğun deyil",
+        "registrationFailed": "Qeydiyyat uğursuz oldu",
+        "surname": "Soyad",
+        "name": "Ad",
+        "email": "Email",
+        "confirmPassword": "Şifrəni təsdiqlə",
+        "alreadyHaveAccount": "Hesabınız var?",
+        "login": "Daxil ol",
+        "createAccount": "Hesab yarat"
+    },
+
+    "wishlist": {
+        "title": "Favorilər",
+        "emptyMessage": "Favoriləriniz boşdur. Sevdiyiniz məhsulları əlavə edin və alış-verişə başlayın.",
+        "emptyDescription": "Sevdiyiniz məhsulları burada toplaya bilərsiniz.",
+        "viewProducts": "Məhsullara bax",
+        "categories": "Kateqoriyalar",
+        "cart": "Səbət",
+        "card": "Səbətə köçür"
+    }
+}

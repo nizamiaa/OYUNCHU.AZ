@@ -7,6 +7,7 @@ import AuthPromptModal from './AuthPromptModal';
 import { useCart } from './CartContext';
 import { useWishlist } from './WishlistContext';
 import { useAuth } from './AuthContext';
+import { useTranslation } from 'react-i18next';
 
 type Product = {
   id: number;
@@ -38,6 +39,8 @@ export default function ProductDetail(){
   const [reviewRating, setReviewRating] = useState(5);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
+
+  const { t } = useTranslation();
 
   useEffect(() => {
     const len = reviews?.length || 0;
@@ -281,8 +284,8 @@ export default function ProductDetail(){
     }
   };
 
-  if (loading) return <div className="p-6">Loading product...</div>;
-  if (error || !product) return <div className="p-6 text-red-600">{error ?? 'Product not found'}</div>;
+  if (loading) return <div className="p-6">{t('loading')}</div>;
+  if (error || !product) return <div className="p-6 text-red-600">{error ?? t('productNotFound')}</div>;
     const formatPrice = (v: any) => {
     const n = Number(v);
     if (!isFinite(n)) return '— ₼';
@@ -354,15 +357,15 @@ export default function ProductDetail(){
           </div>
 
           <div className="mt-8">
-            <h3 className="text-xl font-semibold mb-3">Məhsul haqqında</h3>
+            <h3 className="text-xl font-semibold mb-3">{t('productAbout')}</h3>
             <p className="text-gray-700">{product.description}</p>
           </div>
           
           <div className="mt-8">
-            <h3 className="text-xl font-semibold mb-3">Rəylər</h3>
+            <h3 className="text-xl font-semibold mb-3">{t('reviews')}</h3>
 
             <div className="space-y-4">
-              {reviews.length === 0 && <div className="text-gray-500">Hələ heç bir rəy yoxdur. Sizin rəyiniz faydalı olacaq.</div>}
+              {reviews.length === 0 && <div className="text-gray-500">{t('noReviewsYet')}</div>}
               {(reviews.length <= 1 ? reviews : [(reviews || [])[currentReviewIndex]]).map((r, idx) => (
                 <div key={idx} className="border rounded p-3">
                   <div className="flex items-center justify-between">
@@ -392,10 +395,10 @@ export default function ProductDetail(){
             </div>
 
             <div className="mt-6">
-              <h4 className="font-semibold mb-3">Rəy yaz</h4>
+              <h4 className="font-semibold mb-3">{t('writeReview')}</h4>
 
               <div className="flex items-center gap-2 mb-2">
-                <div className="text-sm">Sizin qiymətiniz:</div>
+                <div className="text-sm">{t('yourRating')}:</div>
                 <div className="flex items-center gap-1">
                   {Array.from({ length: 5 }).map((_, i) => {
                     const val = i + 1;
@@ -414,10 +417,10 @@ export default function ProductDetail(){
                 </div>
               </div>
 
-              <textarea value={reviewText} onChange={(e)=>setReviewText(e.target.value)} className="w-full border rounded p-2" rows={4} placeholder="Rəyinizi yazın... (isteğe bağlı)" />
+              <textarea value={reviewText} onChange={(e)=>setReviewText(e.target.value)} className="w-full border rounded p-2" rows={4} placeholder={t('writeReview2')} />
               <div className="flex gap-3 mt-2">
-                <button onClick={submitReview} className="bg-blue-600 text-white px-4 py-2 rounded">Göndər</button>
-                <button onClick={()=>{setReviewText(''); setReviewRating(5);}} className="px-4 py-2 border rounded">Təmizlə</button>
+                <button onClick={submitReview} className="bg-blue-600 text-white px-4 py-2 rounded">{t('submit')}</button>
+                <button onClick={()=>{setReviewText(''); setReviewRating(5);}} className="px-4 py-2 border rounded">{t('clear')}</button>
               </div>
             </div>
 
@@ -426,10 +429,10 @@ export default function ProductDetail(){
         </div>
 
         <aside className="bg-white rounded-lg p-6">
-          <h4 className="font-semibold mb-3">Qısa məlumat</h4>
-          <div className="text-sm text-gray-600">Qiymət: <span className="font-semibold float-right">{formatPrice(product.price)}</span></div>
-          {product.originalPrice != null && isFinite(Number(product.originalPrice)) && <div className="text-sm text-gray-600">Köhnə qiymət: <span className="line-through float-right">{formatPrice(product.originalPrice)}</span></div>}
-          {product.discount && <div className="text-sm text-gray-600 mt-2">Endirim: <span className="text-red-600 float-right">{product.discount}%</span></div>}
+          <h4 className="font-semibold mb-3">{t('productDetail.shortInfo')}</h4>
+          <div className="text-sm text-gray-600">{t('price')}: <span className="font-semibold float-right">{formatPrice(product.price)}</span></div>
+          {product.originalPrice != null && isFinite(Number(product.originalPrice)) && <div className="text-sm text-gray-600">{t('productDetail.oldPrice')}: <span className="line-through float-right">{formatPrice(product.originalPrice)}</span></div>}
+          {product.discount && <div className="text-sm text-gray-600 mt-2">{t('productDetail.discount')}: <span className="text-red-600 float-right">{product.discount}%</span></div>}
         </aside>
       </div>
     </div>

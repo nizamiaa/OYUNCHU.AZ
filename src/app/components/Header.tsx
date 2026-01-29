@@ -7,7 +7,7 @@ import { useAuth } from './AuthContext';
 import { useWishlist } from './WishlistContext';
 import { LanguageSelector } from './LanguageSelector';
 import { useTranslation } from 'react-i18next';
-import logoSrc from '../../images/logo/oyuncu.png';
+import logoSrc from '../../images/logo/oyunchu.png';
 
 export default function Header() {
   const { t } = useTranslation();
@@ -135,7 +135,7 @@ export default function Header() {
       <div className="bg-blue-600 text-white py-1 px-4">
         <div className="container mx-auto flex justify-between items-center">
           <Link to="/" className="inline-flex items-center gap-3">
-            <img src={logoSrc} alt="Oyunchu" className="h-10 sm:h-10 object-contain transform scale-125" />
+            <img src={logoSrc} alt="Oyunchu" className="h-7 sm:h-20 w-28 sm:w-36 object-contain transform scale-125" />
           </Link>
 
           <div className="flex gap-6">

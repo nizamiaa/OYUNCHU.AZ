@@ -147,6 +147,13 @@
             "subscribe": "Subscribe for exclusive deals!",
             "cta": "Subscribe",
             "alreadySubscribed": "You are already subscribed"
+        },
+        "categories": {
+            "title": "Categories",
+            "playStation5": "PlayStation 5",
+            "nintendoSwitch": "Nintendo Switch",
+            "games": "Games",
+            "accessories": "Accessories"
         }
     },
 

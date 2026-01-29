@@ -22,7 +22,7 @@ export const branches = [
     id: '28may',
     name: '28 May',
     region: 'Bakı',
-    address: '{Azadlıq prospekti 54, (28 May m/st 2ci çıxışı)}',
+    address: 'Azadlıq prospekti 54, (28 May m/st 2ci çıxışı)',
     hours: '10:00–20:00',
     lat: 40.3792056,
     lng: 49.8481658,

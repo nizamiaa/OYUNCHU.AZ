@@ -1,8 +1,10 @@
-import { Facebook, Twitter, Instagram, Youtube, Mail } from 'lucide-react';
+import { Instagram, Mail } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
+import logoSrc from '../../images/logo/oyunchu.png';
+import { FaWhatsapp } from 'react-icons/fa';
 
 export default function Footer() {
   const { t } = useTranslation();
@@ -16,23 +18,29 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* About */}
           <div>
-            <h3 className="font-bold text-xl mb-4">Oyunchu.az</h3>
+            <Link to="/" className="inline-flex items-center gap-3">
+              <img src={logoSrc} alt="Oyunchu" className="h-7 sm:h-20 w-28 sm:w-36 object-contain transform scale-125" />
+            </Link>
             <p className="text-blue-200 text-sm">
               {t('footer.title')}
             </p>
             <div className="flex gap-3 mt-4">
-              <button className="p-2 bg-blue-800 rounded-full hover:bg-orange-500 transition">
-                <Facebook size={20} />
-              </button>
-              <button className="p-2 bg-blue-800 rounded-full hover:bg-orange-500 transition">
-                <Twitter size={20} />
-              </button>
-              <button className="p-2 bg-blue-800 rounded-full hover:bg-orange-500 transition">
+              <a
+                href="https://wa.me/994706908080"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 bg-blue-800 rounded-full hover:bg-orange-500 transition inline-flex"
+              >
+                <FaWhatsapp size={20} />
+              </a>
+              <a
+                href="https://instagram.com/oyunchu_az"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 bg-blue-800 rounded-full hover:bg-orange-500 transition inline-flex"
+              >
                 <Instagram size={20} />
-              </button>
-              <button className="p-2 bg-blue-800 rounded-full hover:bg-orange-500 transition">
-                <Youtube size={20} />
-              </button>
+              </a>
             </div>
           </div>
 

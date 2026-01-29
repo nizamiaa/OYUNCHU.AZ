@@ -147,6 +147,13 @@
             "subscribe": "Подпишитесь на эксклюзивные предложения!",
             "cta": "Подписаться",
             "alreadySubscribed": "Вы уже подписаны"
+        },
+        "categories": {
+            "title": "Категории",
+            "playStation5": "PlayStation 5",
+            "nintendoSwitch": "Nintendo Switch",
+            "games": "Игры",
+            "accessories": "Аксессуары"
         }
     },
 

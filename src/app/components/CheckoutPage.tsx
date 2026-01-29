@@ -179,9 +179,6 @@ export default function CheckoutPage() {
                   <label className={`p-3 border rounded ${payment === 'instore' ? 'ring-2 ring-blue-400' : ''}`}>
                     <input type="radio" name="payment" checked={payment === 'instore'} onChange={() => setPayment('instore')} /> {t('checkout.instorePayment')}
                   </label>
-                  <label className={`p-3 border rounded ${payment === 'cart2cart' ? 'ring-2 ring-blue-400' : ''}`}>
-                    <input type="radio" name="payment" checked={payment === 'cart2cart'} onChange={() => setPayment('cart2cart')} /> {t('checkout.cartToCartPayment')}
-                  </label>
                 </>
               ) : (
                 <>

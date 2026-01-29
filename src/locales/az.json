@@ -147,6 +147,13 @@
             "subscribe": "Eksklüziv təkliflər üçün abunə olun!",
             "cta": "Abunə ol",
             "alreadySubscribed": "Siz artıq abunə olmusunuz"
+        },
+        "categories": {
+            "title": "Kateqoriyalar",
+            "playStation5": "PlayStation 5",
+            "nintendoSwitch": "Nintendo Switch",
+            "games": "Oyunlar",
+            "accessories": "Aksesuarlar"
         }
 
     },

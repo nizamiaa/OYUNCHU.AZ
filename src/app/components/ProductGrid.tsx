@@ -30,14 +30,13 @@ export default function ProductGrid() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-
   const { t } = useTranslation();
 
+  // 🔹 Məhsulları yüklə
   useEffect(() => {
     const load = async () => {
       try {
         const res = await axios.get('/api/products/top-discount');
-
         setProducts(
           res.data.map((p: any) => ({
             id: p.Id,
@@ -57,61 +56,80 @@ export default function ProductGrid() {
         setLoading(false);
       }
     };
-
     load();
   }, []);
 
+  // 🔹 PROFESSIONAL AUTO SCROLL
   useEffect(() => {
-    if (!scrollRef.current || products.length === 0) return;
-
     const container = scrollRef.current;
-    const scrollAmount = 300; // px per tick
-    const intervalTime = 3000; // 3 seconds
+    if (!container || products.length === 0) return;
 
-    // inject a small CSS rule to hide native scrollbar across browsers
-    const styleId = 'hide-scrollbar-style';
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.innerHTML = `
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-      `;
-      document.head.appendChild(style);
-    }
+    let animationFrame: number;
+    const speed = 0.6;
+    let currentSpeed = speed;
+    let isHovered = false;
+    let isUserInteracting = false;
 
-    // Duplicate content technique: render items twice and when we've scrolled
-    // past the width of the first set, jump back by that width (no visual jump).
-    const originalWidth = () => container.scrollWidth / 2 || container.scrollWidth;
+    const originalWidth = container.scrollWidth / 2;
 
-    let running = true;
-    const interval = setInterval(() => {
-      if (!running) return;
-      if (!container) return;
+    const step = () => {
+      container.scrollLeft += currentSpeed;
 
-      // normal smooth scroll
-      container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      if (container.scrollLeft >= originalWidth) {
+        container.scrollLeft -= originalWidth;
+      }
 
-      // after a small timeout (allow smooth scroll to progress), check bounds
-      setTimeout(() => {
-        const ow = originalWidth();
-        if (ow > 0 && container.scrollLeft >= ow) {
-          // instantly jump back by original width to create seamless loop
-          container.scrollLeft = container.scrollLeft - ow;
-        }
-      }, 300);
-    }, intervalTime);
+      animationFrame = requestAnimationFrame(step);
+    };
+
+    animationFrame = requestAnimationFrame(step);
+
+    const onEnter = () => {
+      isHovered = true;
+      currentSpeed = 0;
+    };
+
+    const onLeave = () => {
+      isHovered = false;
+      if (!isUserInteracting) currentSpeed = speed;
+    };
+
+    const onPointerDown = () => {
+      isUserInteracting = true;
+      currentSpeed = 0;
+    };
+
+    const onPointerUp = () => {
+      isUserInteracting = false;
+      if (!isHovered) currentSpeed = speed;
+    };
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        currentSpeed = entry.isIntersecting && !isHovered && !isUserInteracting ? speed : 0;
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(container);
+
+    container.addEventListener('mouseenter', onEnter);
+    container.addEventListener('mouseleave', onLeave);
+    container.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('pointerup', onPointerUp);
 
     return () => {
-      running = false;
-      clearInterval(interval);
+      cancelAnimationFrame(animationFrame);
+      observer.disconnect();
+      container.removeEventListener('mouseenter', onEnter);
+      container.removeEventListener('mouseleave', onLeave);
+      container.removeEventListener('pointerdown', onPointerDown);
+      container.removeEventListener('pointerup', onPointerUp);
     };
   }, [products]);
 
-
-
   if (loading) return <div className="mb-8">{t('loading')}</div>;
-  if (error) return <div className="mb-8 text-red-600">{t('Error loading products')}: {error}</div>;
+  if (error) return <div className="mb-8 text-red-600">{error}</div>;
 
   return (
     <div className="mb-8">
@@ -122,7 +140,10 @@ export default function ProductGrid() {
         </Link>
       </div>
 
-      <div ref={scrollRef} className="flex gap-6 overflow-x-auto pb-4 scroll-smooth hide-scrollbar">
+      <div
+        ref={scrollRef}
+        className="flex gap-6 overflow-x-auto pb-4 hide-scrollbar"
+      >
         {[...products, ...products].map((product, idx) => (
           <Link
             key={`${product.id}-${idx}`}
@@ -135,27 +156,22 @@ export default function ProductGrid() {
                 alt={product.name}
                 className="w-full h-64 object-cover group-hover:scale-105 transition duration-300"
               />
-              {product.discount && product.discount > 0 && (
+
+              {product.discount && (
                 <span className="absolute top-3 right-3 bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold">
                   -{product.discount}%
                 </span>
               )}
+
               <button
                 className="absolute top-3 left-3 bg-white p-2 rounded-full shadow-md hover:bg-red-50 transition"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (!user) {
-                    setModalOpen(true);
-                    return;
-                  }
-
-                  if (inWishlist(product.id)) {
-                    removeFromWishlist(product.id);
-                    return;
-                  }
-
-                  addToWishlist({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl });
+                  if (!user) return setModalOpen(true);
+                  inWishlist(product.id)
+                    ? removeFromWishlist(product.id)
+                    : addToWishlist(product);
                 }}
               >
                 <Heart
@@ -166,23 +182,19 @@ export default function ProductGrid() {
               </button>
             </div>
 
-            <AuthPromptModal open={modalOpen} variant={'auth'} onClose={() => setModalOpen(false)} />
-
             <div className="p-4">
               <h3 className="font-bold text-lg text-gray-800 mb-2">{product.name}</h3>
-              
+
               <div className="flex items-center gap-2 mb-3">
-                <div className="flex items-center gap-1">
-                  <Star size={16} className="fill-yellow-400 text-yellow-400" />
-                  <span className="text-sm font-semibold">{product.rating}</span>
-                </div>
-                <span className="text-sm text-gray-500">({product.reviews} reviews)</span>
+                <Star size={16} className="fill-yellow-400 text-yellow-400" />
+                <span className="text-sm font-semibold">{product.rating}</span>
+                <span className="text-sm text-gray-500">({product.reviews})</span>
               </div>
 
               <div className="flex items-center gap-3 mb-4">
-                <span className="text-2xl font-bold text-blue-600">{Number(product.price).toFixed(2)} ₼</span>
+                <span className="text-2xl font-bold text-blue-600">{product.price} ₼</span>
                 {product.originalPrice && (
-                  <span className="text-lg text-gray-400 line-through">{Number(product.originalPrice).toFixed(2)} ₼</span>
+                  <span className="text-lg text-gray-400 line-through">{product.originalPrice} ₼</span>
                 )}
               </div>
 
@@ -190,23 +202,19 @@ export default function ProductGrid() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  addToCart({
-                    id: product.id,
-                    name: product.name,
-                    price: product.price,
-                    imageUrl: product.imageUrl || undefined,
-                  });
+                  addToCart(product);
                 }}
                 className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-orange-500 transition flex items-center justify-center gap-2 font-semibold"
               >
                 <ShoppingCart size={20} />
                 {t('addToCart')}
               </button>
-
             </div>
           </Link>
         ))}
       </div>
+
+      <AuthPromptModal open={modalOpen} variant={'auth'} onClose={() => setModalOpen(false)} />
     </div>
   );
 }

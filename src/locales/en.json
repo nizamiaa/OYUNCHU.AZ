@@ -41,11 +41,14 @@
     "Error loading products": "Error loading products",
     "viewAll": "View All",
     "loginRemember": "Remember me",
+    "allProducts": "All Products",
+    "bestSellers": "Best sellers",
 
     "header": {
         "campaigns": "Campaigns",
         "affiliates": "Affiliates",
         "login": "Login",
+        "logout": "Logout",
         "hello": "Hello",
         "allCategories": "All Categories",
         "searchPlaceholder": "Search for consoles, games, accessories...",

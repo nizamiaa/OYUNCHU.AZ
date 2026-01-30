@@ -41,11 +41,14 @@
     "Error loading products": "Ошибка загрузки товаров",
     "viewAll": "Просмотреть все",
     "loginRemember": "Запомнить меня",
+    "allProducts": "Все товары",
+    "bestSellers": "Лидеры продаж",
 
     "header": {
         "campaigns": "Кампании",
         "affiliates": "Филиалы",
         "login": "Войти",
+        "logout": "Выйти",
         "hello": "Здравствуйте",
         "allCategories": "Все категории",
         "searchPlaceholder": "Ищите консоли, игры, аксессуары...",

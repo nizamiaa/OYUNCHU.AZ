@@ -215,7 +215,7 @@ export default function ProductsManagement() {
                     <td className="py-3 px-4 font-semibold text-blue-600">
                       {(() => {
                         const price = parseFloat(product.price);
-                        return !isNaN(price) ? `$${price.toFixed(2)}` : '—';
+                        return !isNaN(price) ? `${price.toFixed(2)}₼` : '—';
                       })()}
                     </td>
                     <td className="py-3 px-4">

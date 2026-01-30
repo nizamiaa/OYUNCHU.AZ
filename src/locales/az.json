@@ -41,11 +41,14 @@
     "Error loading products": "Məhsullar yüklənərkən xəta baş verdi",
     "viewAll": "Hamısına bax",
     "loginRemember": "Məni yadda saxla",
+    "allProducts": "Bütün Məhsullar",
+    "bestSellers": "Ən çox satılanlar",
 
     "header": {
         "campaigns": "Kampaniyalar",
         "affiliates": "Filiallar",
         "login": "Daxil ol",
+        "logout": "Çıxış",
         "hello": "Salam",
         "allCategories": "Bütün Kateqoriyalar",
         "searchPlaceholder": "Konsollar, oyunlar, aksesuarlar axtarın...",

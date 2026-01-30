@@ -206,10 +206,10 @@ export default function AllProductsPage() {
   const paramsForTitle = new URLSearchParams(location.search);
   const rawSubForTitle = paramsForTitle.get('subCategory') || paramsForTitle.get('subcategory') || '';
   const categoryParamForTitle = paramsForTitle.get('category') || paramsForTitle.get('Category') || null;
-  let pageTitle = 'All Products';
+  let pageTitle = t('allProducts');
   const specialParamForTitle = paramsForTitle.get('special') || null;
-  if (specialParamForTitle === 'best-sellers') pageTitle = 'Best Sellers';
-  
+  if (specialParamForTitle === 'best-sellers') pageTitle = t('bestSellers');
+
   if (categoryParamForTitle) {
     pageTitle = decodeURIComponent(categoryParamForTitle);
   } else if (rawSubForTitle) {

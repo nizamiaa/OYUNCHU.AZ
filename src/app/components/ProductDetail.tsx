@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { ShoppingCart, Heart, Star } from 'lucide-react';
@@ -12,7 +12,6 @@ import { useTranslation } from 'react-i18next';
 type Product = {
   id: number;
   name: string;
-  description?: string;
   price: number;
   originalPrice?: number;
   imageUrl?: string;
@@ -21,384 +20,388 @@ type Product = {
   discount?: number;
 };
 
-export default function ProductDetail(){
+type ReviewItem = {
+  id?: number;
+  name: string;
+  rating: number;
+  text: string;
+  date: string;
+  adminReply?: string | null;
+  adminReplyAt?: string | null;
+};
+
+const formatPrice = (v: any) => {
+  const n = Number(v);
+  if (!isFinite(n)) return '— ₼';
+  return `${n.toFixed(2)} ₼`;
+};
+
+const formatRating = (val: any) => {
+  const n = Number(val);
+  if (!isFinite(n) || n <= 0) return '0';
+  const s = n.toFixed(1);
+  return s.endsWith('.0') ? String(Math.trunc(n)) : s;
+};
+
+
+// robust datetime parser
+const parseDateToLocalISO = (val: any) => {
+  if (!val) return new Date().toISOString();
+  if (val instanceof Date) return val.toISOString();
+  const s = String(val).trim();
+
+  // ISO
+  if (/\d{4}-\d{2}-\d{2}T/.test(s)) {
+    try { return new Date(s).toISOString(); } catch { return new Date().toISOString(); }
+  }
+
+  // SQL: YYYY-MM-DD HH:MM:SS
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (m) {
+    const year = Number(m[1]);
+    const month = Number(m[2]) - 1;
+    const day = Number(m[3]);
+    const hh = Number(m[4]);
+    const mm = Number(m[5]);
+    const ss = Number(m[6]);
+    const dt = new Date(year, month, day, hh, mm, ss);
+    return dt.toISOString();
+  }
+
+  try { return new Date(s).toISOString(); } catch { return new Date().toISOString(); }
+};
+
+
+export default function ProductDetail() {
   const { id } = useParams();
   const pid = Number(id);
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
+  const { t } = useTranslation();
   const { addToCart } = useCart();
   const { add: addToWishlist, remove: removeFromWishlist, contains: inWishlist } = useWishlist();
   const { user, token } = useAuth();
 
-  // Reviews persisted in localStorage per product
-  const reviewsKey = `reviews_${pid}`;
-  const [reviews, setReviews] = useState<Array<{name:string,rating:number,text:string,date:string,adminReply?: string | null, adminReplyAt?: string | null}>>([]);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [reviewText, setReviewText] = useState('');
   const [reviewRating, setReviewRating] = useState(5);
   const [showAuthModal, setShowAuthModal] = useState(false);
+
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
 
-  const { t } = useTranslation();
+  const mapServerProduct = (p: any): Product => ({
+    id: Number(p.Id ?? p.id ?? 0),
+    name: p.Name ?? p.name ?? '',
+    price: p.Price !== undefined && p.Price !== null ? Number(p.Price) : 0,
+    originalPrice:
+      p.OriginalPrice !== undefined && p.OriginalPrice !== null
+        ? Number(p.OriginalPrice)
+        : undefined,
+    imageUrl: p.ImageUrl ?? p.imageUrl ?? '',
+    discount: p.Discount !== undefined && p.Discount !== null ? Number(p.Discount) : 0,
+    rating: p.Rating !== undefined && p.Rating !== null ? Number(p.Rating) : 0,
+    reviews: p.Reviews !== undefined && p.Reviews !== null ? Number(p.Reviews) : 0,
+  });
+
+  const mapServerReviews = (list: any[]): ReviewItem[] =>
+    (list || []).map((r: any) => ({
+      id: r.Id ?? r.id,
+      name: r.UserName || 'Anonymous',
+      rating: Number(r.Rating || 0),
+      text: r.Comment || '',
+      date: parseDateToLocalISO(r.CreatedAt),
+      adminReply: (r.AdminReply ?? r.AdminReplyText) || null,
+      adminReplyAt: r.AdminReplyAt || r.AdminReplyDate || null,
+    }));
+
+  const loadProduct = async () => {
+    if (!isFinite(pid) || pid <= 0) {
+      setLoading(false);
+      setError(t('productNotFound', 'Product not found'));
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // 1) Single product
+      try {
+        const res = await axios.get(`/api/products/${pid}`);
+        const p = res.data;
+
+        const missingCore = !p || (!(p.Id || p.id) && !(p.Name || p.name));
+        if (missingCore) throw new Error('Incomplete product response');
+
+        const normalized = mapServerProduct(p);
+        setProduct(normalized);
+
+        const list = Array.isArray(p.ReviewsList) ? mapServerReviews(p.ReviewsList) : [];
+        setReviews(list);
+
+        // focus first review that has admin reply
+        const adminIdx = list.findIndex((x) => x.adminReply);
+        setCurrentReviewIndex(adminIdx >= 0 ? adminIdx : 0);
+
+        return;
+      } catch {
+        // 2) Fallback list
+        const res2 = await axios.get('/api/products');
+        const found = (res2.data || []).find((pp: any) => (pp.Id ?? pp.id) === pid);
+        if (!found) {
+          setError(t('productNotFound', 'Product not found'));
+          setProduct(null);
+          setReviews([]);
+        } else {
+          setProduct({
+            id: Number(found.Id ?? found.id),
+            name: found.Name ?? found.name,
+            price: Number(found.Price ?? found.price ?? 0),
+            originalPrice: found.OriginalPrice ?? found.originalPrice,
+            imageUrl: found.ImageUrl ?? found.imageUrl,
+            rating: found.Rating ?? found.rating,
+            reviews: found.Reviews ?? found.reviews,
+            discount: found.Discount ?? found.discount,
+          });
+          setReviews([]); // list endpoint doesn't include reviews list
+        }
+      }
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message || t('loadingFailed', 'Failed loading product'));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const len = reviews?.length || 0;
+    loadProduct();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pid]);
+
+  // Auto rotate visible review
+  useEffect(() => {
+    const len = reviews.length;
     if (len <= 1) {
       setCurrentReviewIndex(0);
       return;
     }
-    const id = setInterval(() => {
-      setCurrentReviewIndex(i => (i + 1) % Math.max(1, (reviews || []).length));
+    const timer = setInterval(() => {
+      setCurrentReviewIndex((i) => (i + 1) % len);
     }, 4000);
-    return () => clearInterval(id);
+    return () => clearInterval(timer);
   }, [reviews]);
 
+  // Refresh reviews periodically so admin replies appear without reload
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        // Try single product endpoint first
-        try {
-          const res = await axios.get(`/api/products/${pid}`);
-          console.log('PRODUCT RAW', res.data);
-          const p = res.data;
+    if (!isFinite(pid) || pid <= 0) return;
 
-          // If the response is incomplete (missing id or name), fall back to fetching the product list
-          const missingCore = !p || (!(p.Id || p.id) && !(p.Name || p.name));
-          if (missingCore) throw new Error('Incomplete product response');
-
-          const normalized = {
-            id: Number(p.Id ?? p.id ?? 0),
-            name: p.Name ?? p.name ?? '',
-            description: p.Description ?? p.description ?? '',
-            price: p.Price !== undefined && p.Price !== null ? Number(p.Price) : 0,
-            originalPrice: p.OriginalPrice !== undefined && p.OriginalPrice !== null ? Number(p.OriginalPrice) : 0,
-            imageUrl: p.ImageUrl ?? p.imageUrl ?? '',
-            discount: p.Discount !== undefined && p.Discount !== null ? Number(p.Discount) : 0,
-            rating: p.Rating !== undefined && p.Rating !== null ? Number(p.Rating) : 0,
-            reviews: p.Reviews !== undefined && p.Reviews !== null ? Number(p.Reviews) : 0,
-         };
-
-          setProduct(normalized);
-          // if backend returned reviews list, use it
-          if (res.data && Array.isArray(res.data.ReviewsList)) {
-            const mapped = res.data.ReviewsList.map((r:any) => ({
-              name: r.UserName || 'Anonymous',
-              rating: r.Rating || 0,
-              text: r.Comment || '',
-              date: parseDateToLocalISO(r.CreatedAt),
-              adminReply: (r.AdminReply ?? r.AdminReplyText) || null,
-              adminReplyAt: r.AdminReplyAt || r.AdminReplyDate || null,
-            }));
-
-            // merge with any locally stored reviews to survive refresh/moderation
-            try {
-              const rawLocal = localStorage.getItem(reviewsKey);
-              const localList = rawLocal ? JSON.parse(rawLocal) : [];
-              const merged = [...mapped];
-              for (const loc of (localList || [])) {
-                const idx = merged.findIndex((m:any) => m.name === loc.name && (m.text === loc.text || m.date === loc.date));
-                if (idx === -1) {
-                  merged.push(loc);
-                } else {
-                  // prefer server-provided fields (adminReply/adminReplyAt) when present
-                  merged[idx] = { ...loc, ...merged[idx] };
-                }
-              }
-              setReviews(merged);
-              // focus on any review that already has an admin reply so reply is visible
-              const adminIdx = merged.findIndex((m:any) => m.adminReply);
-              if (adminIdx >= 0) setCurrentReviewIndex(adminIdx);
-              // persist merged so local pending reviews remain
-              try { localStorage.setItem(reviewsKey, JSON.stringify(merged)); } catch (e) {}
-              // do not block users from submitting multiple reviews; allow duplicates
-            } catch (e) {
-              setReviews(mapped);
-              // focus admin reply if present
-              const adminIdx2 = mapped.findIndex((m:any) => m.adminReply);
-              if (adminIdx2 >= 0) setCurrentReviewIndex(adminIdx2);
-              // allow multiple reviews per user — don't mark as reviewed
-            }
-          }
-        } catch (err) {
-          // fallback: fetch all and find product
-          const res2 = await axios.get('/api/products');
-          const found = (res2.data || []).find((p:any) => (p.Id ?? p.id) === pid || p.id === pid || p.Id === pid);
-          if (found) {
-            setProduct({
-              id: found.Id ?? found.id,
-              name: found.Name ?? found.name,
-              description: found.Description ?? found.description,
-              price: found.Price ?? found.price,
-              originalPrice: found.OriginalPrice ?? found.originalPrice,
-              imageUrl: found.ImageUrl ?? found.imageUrl,
-              rating: found.Rating ?? found.rating,
-              reviews: found.Reviews ?? found.reviews,
-              discount: found.Discount ?? found.discount,
-            });
-          } else {
-            setError('Product not found');
-          }
-        }
-      } catch (err: any) {
-        console.error(err);
-        setError(err.message || 'Failed loading product');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
-  }, [pid]);
-
-  useEffect(() => {
-    // only load local reviews if we don't already have server-provided reviews
-    if (reviews.length) return;
-    try {
-      const raw = localStorage.getItem(reviewsKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setReviews(parsed);
-        const adminIdxLocal = (parsed || []).findIndex((m:any) => m.adminReply);
-        if (adminIdxLocal >= 0) setCurrentReviewIndex(adminIdxLocal);
-      }
-    } catch (err) {
-      console.error('Failed to load reviews', err);
-    }
-  }, [reviewsKey]);
-
-  // Periodically refresh reviews from server so admin replies appear without reload
-  useEffect(() => {
     let cancelled = false;
+
     const refresh = async () => {
       try {
         const res = await axios.get(`/api/products/${pid}`);
         if (cancelled) return;
-        if (res.data && Array.isArray(res.data.ReviewsList)) {
-          const mapped = res.data.ReviewsList.map((r:any) => ({
-            name: r.UserName || 'Anonymous',
-            rating: r.Rating || 0,
-            text: r.Comment || '',
-            date: parseDateToLocalISO(r.CreatedAt),
-            adminReply: (r.AdminReply ?? r.AdminReplyText) || null,
-            adminReplyAt: r.AdminReplyAt || r.AdminReplyDate || null,
-          }));
-
-            // merge with local-only reviews stored in localStorage
-            try {
-              const rawLocal = localStorage.getItem(reviewsKey);
-              const localList = rawLocal ? JSON.parse(rawLocal) : [];
-              const merged = [...mapped];
-              for (const loc of (localList || [])) {
-                const idx = merged.findIndex((m:any) => m.name === loc.name && (m.text === loc.text || m.date === loc.date));
-                if (idx === -1) {
-                  merged.push(loc);
-                } else {
-                  merged[idx] = { ...loc, ...merged[idx] };
-                }
-              }
-              setReviews(merged);
-              try { localStorage.setItem(reviewsKey, JSON.stringify(merged)); } catch (e) {}
-              const adminIdx = (merged || []).findIndex((m:any) => m.adminReply);
-              if (adminIdx >= 0) setCurrentReviewIndex(adminIdx);
-            } catch (e) {
-              setReviews(mapped);
-              const adminIdx2 = mapped.findIndex((m:any) => m.adminReply);
-              if (adminIdx2 >= 0) setCurrentReviewIndex(adminIdx2);
-            }
+        if (res.data) {
+          setProduct(mapServerProduct(res.data));
+          if (Array.isArray(res.data.ReviewsList)) {
+            const list = mapServerReviews(res.data.ReviewsList);
+            setReviews(list);
+          }
         }
-      } catch (e) {
-        // silent fail - keep existing reviews
+      } catch {
+        // silent
       }
     };
 
-    // run once immediately then every 15s
-    refresh();
-    const t = setInterval(refresh, 15000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, [pid, reviewsKey]);
+    const tmr = setInterval(refresh, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(tmr);
+    };
+  }, [pid]);
 
-  // update hasReviewed when reviews or user change (covers local-storage reviews)
-  // do not block users from submitting multiple reviews; keep form available
-
-  const avgRating = useMemo(() => {
-  const r = reviews || [];
-  const productRating = Number(product?.rating ?? 0);
-  const productReviews = Number(product?.reviews ?? 0);
-
-  const total = r.reduce((sum, rev) => sum + Number(rev.rating || 0), 0) + productRating * productReviews;
-  const count = r.length + productReviews;
-
-  return count ? +(total / count).toFixed(1) : 0;
-}, [reviews, product]);
-
+  const avgRating = useMemo(() => Number(product?.rating ?? 0), [product]);
+  const totalReviewsCount = useMemo(() => Number(product?.reviews ?? 0), [product]);
 
   const submitReview = async () => {
     if (!user || !token) {
       setShowAuthModal(true);
       return;
     }
-
-    // allow submitting rating-only reviews; only block if rating not set
     if (reviewRating <= 0) return;
 
     try {
-      const res = await axios.post(`/api/products/${pid}/reviews`, { rating: reviewRating, text: reviewText }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await axios.post(
+        `/api/products/${pid}/reviews`,
+        { rating: reviewRating, text: reviewText },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-        if (res.data && res.data.ok) {
-        const inserted = res.data.review;
-        const newEntry = { name: inserted.UserName || user.name || 'You', rating: inserted.Rating || reviewRating, text: inserted.Comment || reviewText, date: parseDateToLocalISO(inserted.CreatedAt), adminReply: inserted.AdminReply ?? null, adminReplyAt: inserted.AdminReplyAt ?? null };
-        const next = [...reviews, newEntry];
-        setReviews(next);
-        // prefer showing any review that already has an admin reply; otherwise show the newly added review
-        const adminIdxNew = next.findIndex((m:any) => m.adminReply);
-        setCurrentReviewIndex(adminIdxNew >= 0 ? adminIdxNew : next.length - 1);
-        // persist so it remains after refresh (in case server doesn't immediately return it)
-        try { localStorage.setItem(reviewsKey, JSON.stringify(next)); } catch (e) {}
-        // update local product aggregate view
-        setProduct(p => p ? { ...p, rating: res.data.avgRating ?? p.rating, reviews: res.data.reviewCount ?? (p.reviews ?? 0) } : p);
-        setReviewText(''); setReviewRating(5);
-      } else {
-        // fallback: store locally
-        const entry = { name: user?.name ?? 'Guest', rating: reviewRating, text: reviewText, date: new Date().toISOString(), adminReply: null, adminReplyAt: null };
-        const next = [...reviews, entry];
-        setReviews(next);
-        const adminIdxF = next.findIndex((m:any) => m.adminReply);
-        setCurrentReviewIndex(adminIdxF >= 0 ? adminIdxF : next.length - 1);
-        try { localStorage.setItem(reviewsKey, JSON.stringify(next)); } catch (e) {}
-        setReviewText(''); setReviewRating(5);
+      if (res.data?.ok) {
+        setReviewText('');
+        setReviewRating(5);
+
+        // reload product so aggregates + list are fresh
+        await loadProduct();
       }
-    } catch (err) {
-      console.error('Submit review failed', err);
-      // fallback to local storage if server fails
-      const entry = { name: user?.name ?? 'Guest', rating: reviewRating, text: reviewText, date: new Date().toISOString(), adminReply: null, adminReplyAt: null };
-      const next = [...reviews, entry];
-      setReviews(next);
-      const adminIdxErr = next.findIndex((m:any) => m.adminReply);
-      setCurrentReviewIndex(adminIdxErr >= 0 ? adminIdxErr : next.length - 1);
-      try { localStorage.setItem(reviewsKey, JSON.stringify(next)); } catch (e) {}
-      setReviewText(''); setReviewRating(5);
+    } catch (e) {
+      console.error('Submit review failed', e);
+      // burada istəsən message göstərə bilərik, amma UI-ni qarışdırmıram
     }
   };
 
-  if (loading) return <div className="p-6">{t('loading')}</div>;
-  if (error || !product) return <div className="p-6 text-red-600">{error ?? t('productNotFound')}</div>;
-    const formatPrice = (v: any) => {
-    const n = Number(v);
-    if (!isFinite(n)) return '— ₼';
-    return `${n.toFixed(2)} ₼`;
-    };
+  if (loading) return <div className="p-6">{t('loading', 'Loading...')}</div>;
+  if (error || !product) return <div className="p-6 text-red-600">{error ?? t('productNotFound', 'Product not found')}</div>;
 
-    // Parse various DB timestamp formats into an ISO string representing the same local time
-    const parseDateToLocalISO = (val: any) => {
-      if (!val) return new Date().toISOString();
-      if (val instanceof Date) return val.toISOString();
-      const s = String(val).trim();
-      // If already ISO with timezone, keep as-is
-      if (/\d{4}-\d{2}-\d{2}T/.test(s)) {
-        try { return new Date(s).toISOString(); } catch { return new Date().toISOString(); }
-      }
-      // Match SQL-style 'YYYY-MM-DD HH:MM:SS' (with optional milliseconds)
-      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
-      if (m) {
-        const year = Number(m[1]), month = Number(m[2]) - 1, day = Number(m[3]);
-        const hh = Number(m[4]), mm = Number(m[5]), ss = Number(m[6]);
-        const dt = new Date(year, month, day, hh, mm, ss); // local time
-        return dt.toISOString();
-      }
-      // Fallback
-      try { return new Date(s).toISOString(); } catch { return new Date().toISOString(); }
-    };
-
-    const maskName = (name?: string) => {
-      if (!name) return 'An****';
-      const s = String(name).trim();
-      if (s.length <= 2) return s;
-      return s.slice(0,2) + '*'.repeat(s.length - 2);
-    };
-
+  const showing = reviews.length <= 1 ? reviews : [reviews[currentReviewIndex]];
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 bg-white rounded-lg p-6">
-          <div className="flex gap-6">
-            <ImageWithFallback src={product.imageUrl || ''} alt={product.name} className="w-80 h-80 object-cover rounded" />
+    <div className="container mx-auto px-4 py-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* MAIN */}
+        <div className="lg:col-span-2 bg-white rounded-xl border p-4 sm:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <h1 className="text-2xl font-bold mb-2">{product.name}</h1>
-              <div className="flex items-center gap-4 mb-3">
+              <ImageWithFallback
+                src={product.imageUrl || ''}
+                alt={product.name}
+                className="w-full h-72 sm:h-80 object-cover rounded-xl border"
+              />
+            </div>
+
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2 break-words">
+                {product.name}
+              </h1>
+
+              <div className="flex flex-wrap items-center gap-3 mb-3">
                 <div className="flex items-center gap-1">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} size={16} className={i < Math.round(avgRating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} />
+                    <Star
+                      key={i}
+                      size={16}
+                      className={i < Math.round(avgRating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}
+                    />
                   ))}
                 </div>
-                <div className="text-sm text-gray-700 font-semibold">{avgRating} / 5</div>
-                <div className="text-sm text-gray-500">({reviews.length + (product.reviews ?? 0)} reviews)</div>
+                <div className="text-sm text-gray-700 font-semibold">{formatRating(avgRating)} / 5</div>
+                <div className="text-sm text-gray-500">({totalReviewsCount} {t('reviews', 'reviews')})</div>
               </div>
+
               {product.discount && product.discount > 0 && (
-                <div className="inline-block bg-orange-500 text-white px-3 py-1 rounded mb-3">-{product.discount}%</div>
+                <div className="inline-flex items-center bg-orange-500 text-white px-3 py-1 rounded-full text-xs font-semibold mb-3">
+                  -{product.discount}%
+                </div>
               )}
-              <div className="text-3xl font-bold text-blue-600 mb-4">{formatPrice(product.price)}</div>
-              {product.originalPrice != null && isFinite(Number(product.originalPrice)) && (
-                <div className="text-sm text-gray-400 line-through mb-4">{formatPrice(product.originalPrice)}</div>
-              )}
-              <div className="flex gap-3">
-                <button onClick={() => addToCart({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl })} className="bg-blue-600 text-white px-4 py-2 rounded">Add to Cart <ShoppingCart size={14} className="inline-block ml-2"/></button>
-                <button onClick={() => {
-                  if (inWishlist(product.id)) removeFromWishlist(product.id); else addToWishlist({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl });
-                }} className="px-4 py-2 rounded border">
-                  <Heart size={16} className={inWishlist(product.id) ? 'text-red-500' : 'text-gray-600'} fill={inWishlist(product.id) ? 'currentColor' : 'none'} />
+
+              <div className="text-2xl sm:text-3xl font-bold text-blue-600">
+                {formatPrice(product.price)}
+              </div>
+
+              {product.originalPrice != null &&
+                isFinite(Number(product.originalPrice)) &&
+                Number(product.originalPrice) > Number(product.price) && (
+                  <div className="text-sm text-gray-400 line-through mt-1">
+                    {formatPrice(product.originalPrice)}
+                  </div>
+                )}
+
+              <div className="flex flex-wrap gap-2 mt-5">
+                <button
+                  onClick={() =>
+                    addToCart({
+                      id: product.id,
+                      name: product.name,
+                      price: product.price,
+                      imageUrl: product.imageUrl,
+                      oldPrice: product.originalPrice,
+                    } as any)
+                  }
+                  className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+                >
+                  {t('addToCart', 'Add to Cart')}
+                  <ShoppingCart size={16} />
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (inWishlist(product.id)) removeFromWishlist(product.id);
+                    else addToWishlist({ id: product.id, name: product.name, price: product.price, imageUrl: product.imageUrl });
+                  }}
+                  className="inline-flex items-center justify-center px-3 py-2 rounded-lg border hover:bg-gray-50"
+                  aria-label="wishlist"
+                >
+                  <Heart
+                    size={18}
+                    className={inWishlist(product.id) ? 'text-red-500' : 'text-gray-600'}
+                    fill={inWishlist(product.id) ? 'currentColor' : 'none'}
+                  />
                 </button>
               </div>
             </div>
           </div>
 
+          {/* REVIEWS */}
           <div className="mt-8">
-            <h3 className="text-xl font-semibold mb-3">{t('productAbout')}</h3>
-            <p className="text-gray-700">{product.description}</p>
-          </div>
-          
-          <div className="mt-8">
-            <h3 className="text-xl font-semibold mb-3">{t('reviews')}</h3>
+            <h3 className="text-lg font-semibold mb-3">{t('reviews', 'Reviews')}</h3>
 
             <div className="space-y-4">
-              {reviews.length === 0 && <div className="text-gray-500">{t('noReviewsYet')}</div>}
-              {(reviews.length <= 1 ? reviews : [(reviews || [])[currentReviewIndex]]).map((r, idx) => (
-                <div key={idx} className="border rounded p-3">
-                  <div className="flex items-center justify-between">
-                      <div className="font-semibold">{maskName(r.name)}</div>
-                    <div className="text-sm text-gray-500">{new Date(r.date).toLocaleString()}</div>
+              {reviews.length === 0 && <div className="text-gray-500 text-sm">{t('noReviewsYet', 'No reviews yet')}</div>}
+
+              {showing.map((r, idx) => (
+                <div key={r.id ?? idx} className="border rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="font-semibold text-gray-900">{r.name}</div>
+                    <div className="text-xs text-gray-500">{new Date(r.date).toLocaleString()}</div>
                   </div>
-                  <div className="flex items-center gap-2 text-yellow-400 mt-2">
-                    {Array.from({length: r.rating}).map((_,i)=>(<Star key={i} size={14}/>))}
+
+                  <div className="flex items-center gap-1 mt-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star
+                        key={i}
+                        size={14}
+                        className={i < Number(r.rating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}
+                      />
+                    ))}
                   </div>
-                  <div className="mt-2 text-gray-700">{r.text}</div>
+
+                  {r.text ? <div className="mt-2 text-sm text-gray-700 break-words">{r.text}</div> : null}
+
                   {r.adminReply && (
-                    <div className="mt-3 p-3 bg-gray-50 border-l-4 border-blue-400">
-                      <div className="text-xs text-gray-600">Admin cavabı{r.adminReplyAt ? ` — ${new Date(r.adminReplyAt).toLocaleString()}` : ''}</div>
-                      <div className="text-sm mt-1 text-gray-800">{r.adminReply}</div>
+                    <div className="mt-3 p-3 bg-gray-50 border-l-4 border-blue-400 rounded">
+                      <div className="text-xs text-gray-600">
+                        Admin cavabı{r.adminReplyAt ? ` — ${new Date(r.adminReplyAt).toLocaleString()}` : ''}
+                      </div>
+                      <div className="text-sm mt-1 text-gray-800 break-words">{r.adminReply}</div>
                     </div>
                   )}
                 </div>
               ))}
 
               {reviews.length > 1 && (
-                <div className="flex gap-2 mt-3 justify-center">
+                <div className="flex gap-2 justify-center pt-1">
                   {reviews.map((_, i) => (
-                    <button key={i} onClick={() => setCurrentReviewIndex(i)} className={`${i === currentReviewIndex ? 'bg-blue-600' : 'bg-gray-300'} w-3 h-3 rounded-full`} aria-label={`Go to review ${i+1}`} />
+                    <button
+                      key={i}
+                      onClick={() => setCurrentReviewIndex(i)}
+                      className={`${i === currentReviewIndex ? 'bg-blue-600' : 'bg-gray-300'} w-2.5 h-2.5 rounded-full`}
+                      aria-label={`Go to review ${i + 1}`}
+                    />
                   ))}
                 </div>
               )}
             </div>
 
+            {/* WRITE REVIEW */}
             <div className="mt-6">
-              <h4 className="font-semibold mb-3">{t('writeReview')}</h4>
+              <h4 className="font-semibold mb-3">{t('writeReview', 'Write a review')}</h4>
 
               <div className="flex items-center gap-2 mb-2">
-                <div className="text-sm">{t('yourRating')}:</div>
+                <div className="text-sm text-gray-700">{t('yourRating', 'Your rating')}:</div>
                 <div className="flex items-center gap-1">
                   {Array.from({ length: 5 }).map((_, i) => {
                     const val = i + 1;
@@ -417,22 +420,61 @@ export default function ProductDetail(){
                 </div>
               </div>
 
-              <textarea value={reviewText} onChange={(e)=>setReviewText(e.target.value)} className="w-full border rounded p-2" rows={4} placeholder={t('writeReview2')} />
-              <div className="flex gap-3 mt-2">
-                <button onClick={submitReview} className="bg-blue-600 text-white px-4 py-2 rounded">{t('submit')}</button>
-                <button onClick={()=>{setReviewText(''); setReviewRating(5);}} className="px-4 py-2 border rounded">{t('clear')}</button>
-              </div>
-            </div>
+              <textarea
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                className="w-full border rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                rows={4}
+                placeholder={t('writeReview2', 'Write your review...')}
+              />
 
-            <AuthPromptModal open={showAuthModal} variant={'auth'} onClose={() => setShowAuthModal(false)} />
+              <div className="flex flex-wrap gap-2 mt-3">
+                <button
+                  onClick={submitReview}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+                >
+                  {t('submit', 'Submit')}
+                </button>
+                <button
+                  onClick={() => {
+                    setReviewText('');
+                    setReviewRating(5);
+                  }}
+                  className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-gray-50"
+                >
+                  {t('clear', 'Clear')}
+                </button>
+              </div>
+
+              <AuthPromptModal open={showAuthModal} variant={'auth'} onClose={() => setShowAuthModal(false)} />
+            </div>
           </div>
         </div>
 
-        <aside className="bg-white rounded-lg p-6">
-          <h4 className="font-semibold mb-3">{t('productDetail.shortInfo')}</h4>
-          <div className="text-sm text-gray-600">{t('price')}: <span className="font-semibold float-right">{formatPrice(product.price)}</span></div>
-          {product.originalPrice != null && isFinite(Number(product.originalPrice)) && <div className="text-sm text-gray-600">{t('productDetail.oldPrice')}: <span className="line-through float-right">{formatPrice(product.originalPrice)}</span></div>}
-          {product.discount && <div className="text-sm text-gray-600 mt-2">{t('productDetail.discount')}: <span className="text-red-600 float-right">{product.discount}%</span></div>}
+        {/* SIDEBAR */}
+        <aside className="bg-white rounded-xl border p-5 h-fit">
+          <h4 className="font-semibold mb-3">{t('productDetail.shortInfo', 'Short info')}</h4>
+
+          <div className="text-sm text-gray-700 flex justify-between py-1">
+            <span>{t('price', 'Price')}:</span>
+            <span className="font-semibold">{formatPrice(product.price)}</span>
+          </div>
+
+          {product.originalPrice != null &&
+            isFinite(Number(product.originalPrice)) &&
+            Number(product.originalPrice) > Number(product.price) && (
+              <div className="text-sm text-gray-700 flex justify-between py-1">
+                <span>{t('productDetail.oldPrice', 'Old price')}:</span>
+                <span className="line-through text-gray-400">{formatPrice(product.originalPrice)}</span>
+              </div>
+            )}
+
+          {product.discount ? (
+            <div className="text-sm text-gray-700 flex justify-between py-1 mt-1">
+              <span>{t('productDetail.discount', 'Discount')}:</span>
+              <span className="text-red-600 font-semibold">{product.discount}%</span>
+            </div>
+          ) : null}
         </aside>
       </div>
     </div>

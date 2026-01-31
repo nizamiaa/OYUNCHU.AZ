@@ -20,6 +20,7 @@ const path = require('path');
 // Provide __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -46,6 +47,21 @@ app.post('/api/debug', (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 
+/**
+ * Helper: find a surname-like column name in Users table.
+ * Supports: Surname, LastName, last_name, etc.
+ */
+async function detectSurnameColumn(pool) {
+  try {
+    const cols = await pool.request().input('tbl', 'Users')
+      .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+    const names = (cols.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+    return names.find(n => /surname|last.?name/i.test(n)) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // authMiddleware: verify token then load user role from DB on each request
 const authMiddleware = (roles = []) => async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -58,8 +74,24 @@ const authMiddleware = (roles = []) => async (req, res, next) => {
 
     // load fresh user info (role/name/status) from DB per request
     const pool = await getPool();
-    const ures = await pool.request().input('id', userId).query('SELECT TOP (1) Id, Name, Role, Status FROM Users WHERE Id = @id');
-    if (!ures.recordset || ures.recordset.length === 0) return res.status(401).json({ error: 'Invalid token - user not found' });
+
+    // ✅ detect surname column and include it
+    const surnameCol = await detectSurnameColumn(pool);
+    const selectCols = [
+      'Id',
+      'Name',
+      'Role',
+      'Status',
+      surnameCol ? `[${surnameCol}] AS Surname` : null
+    ].filter(Boolean).join(', ');
+
+    const ures = await pool.request()
+      .input('id', userId)
+      .query(`SELECT TOP (1) ${selectCols} FROM Users WHERE Id = @id`);
+
+    if (!ures.recordset || ures.recordset.length === 0) {
+      return res.status(401).json({ error: 'Invalid token - user not found' });
+    }
     const user = ures.recordset[0];
 
     if (roles.length) {
@@ -68,7 +100,15 @@ const authMiddleware = (roles = []) => async (req, res, next) => {
       if (!allowed.includes(userRole)) return res.status(403).json({ error: 'Forbidden' });
     }
 
-    req.user = { id: user.Id, role: user.Role, name: user.Name, status: user.Status };
+    // ✅ include surname so review username can be full name
+    req.user = {
+      id: user.Id,
+      role: user.Role,
+      name: user.Name,
+      surname: user.Surname || null,
+      status: user.Status
+    };
+
     next();
   } catch (err) {
     console.error('authMiddleware error:', err);
@@ -119,13 +159,16 @@ app.get('/api/products', async (req, res) => {
     console.error(err);
     const msg = String(err || '');
     if (msg.includes('Invalid column name') && msg.includes('EmailVerifyToken')) {
-      return res.status(500).json({ error: 'Database missing EmailVerifyToken column. Run: ALTER TABLE Users ADD EmailVerifyToken NVARCHAR(128) NULL; ALTER TABLE Users ADD IsVerified BIT DEFAULT 0 NOT NULL;' });
+      return res.status(500).json({
+        error:
+          'Database missing EmailVerifyToken column. Run: ALTER TABLE Users ADD EmailVerifyToken NVARCHAR(128) NULL; ALTER TABLE Users ADD IsVerified BIT DEFAULT 0 NOT NULL;'
+      });
     }
     res.status(500).json({ error: String(err) });
   }
 });
 
-// Get top discounted products (top 6 by Discount desc)
+// Get top discounted products (top 8 by Discount desc)
 app.get('/api/products/top-discount', async (req, res) => {
   try {
     const pool = await getPool();
@@ -152,11 +195,8 @@ app.get('/api/products/top-discount', async (req, res) => {
   }
 });
 
-
-
 // Post a review for a product (requires auth)
 app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
-  // Accept optional token: if Authorization header present verify, else proceed as anonymous
   console.log('[reviews] ENTER', req.method, req.originalUrl, 'auth=', req.headers.authorization, 'body=', req.body);
   const id = parseInt(req.params.id, 10);
   const { rating, text } = req.body;
@@ -169,14 +209,17 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
     const authUser = req.user;
     if (!authUser || !authUser.id) return res.status(401).json({ error: 'Authentication required' });
     const userId = authUser.id;
-    const userName = authUser.name ?? 'Anonymous';
 
-    // detect if Feedback table has a UserId column; prefer using UserId for uniqueness
+    // ✅ full name (Name + Surname) if available
+    const fullName = [authUser.name, authUser.surname].filter(Boolean).join(' ');
+    const userName = fullName || authUser.name || 'Anonymous';
+
     // Detect if Feedback table has any UserId-like column (e.g. UserId, User_ID, userid)
     let hasUserId = false;
     let userIdCol = null;
     try {
-      const colsRes = await pool.request().input('tbl', 'Feedback').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+      const colsRes = await pool.request().input('tbl', 'Feedback')
+        .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
       const names = (colsRes.recordset || []).map(r => String(r.COLUMN_NAME || ''));
       const found = names.find(n => /user.*id/i.test(n));
       if (found) { hasUserId = true; userIdCol = found; }
@@ -187,18 +230,19 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
     // Detect which CreatedAt column variant exists (look for any column starting with "Created")
     let createdCol = 'CreatedAt';
     try {
-      const cck = await pool.request().input('tbl', 'Feedback').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME LIKE 'Created%'");
+      const cck = await pool.request()
+        .input('tbl', 'Feedback')
+        .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME LIKE 'Created%'");
       if ((cck.recordset || []).length) createdCol = cck.recordset[0].COLUMN_NAME;
     } catch (e) {
       // keep default
     }
 
-    // We will always insert a new feedback row. Previously we attempted to dedupe
-    // and update an existing feedback per user; now we allow multiple reviews per
-    // user for the same product. If a UserId-like column exists, include it on insert.
+    // We always insert a new feedback row.
     let inserted = null;
     try {
       console.log('[reviews] about to insert feedback', { productId: id, userId: hasUserId ? userId : undefined, userName, rating, comment: text || '', createdCol });
+
       if (hasUserId && userIdCol) {
         const insQ = `INSERT INTO Feedback (ProductId, [${userIdCol}], UserName, Comment, Rating, ${createdCol}, IsApproved) OUTPUT INSERTED.* VALUES (@productId, @userId, @userName, @comment, @rating, GETDATE(), 1)`;
         const ins = await pool.request()
@@ -228,21 +272,28 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
 
     // recompute aggregates (approved only)
     try {
-    const agg = await pool.request().input('id', id).query('SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1');
-    const row = agg.recordset[0] || { AvgRating: null, ReviewCount: 0 };
-    console.log('[reviews] aggregate row for product', id, row);
-    const avg = row.AvgRating !== null ? Number(row.AvgRating) : null;
-    const count = Number(row.ReviewCount || 0);
+      const agg = await pool.request()
+        .input('id', id)
+        .query('SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1');
+      const row = agg.recordset[0] || { AvgRating: null, ReviewCount: 0 };
+      console.log('[reviews] aggregate row for product', id, row);
+
+      const avg = row.AvgRating !== null ? Number(row.AvgRating) : null;
+      const count = Number(row.ReviewCount || 0);
 
       // update Products table metrics (best-effort)
       try {
-        await pool.request().input('id', id).input('avg', avg).input('count', count)
+        await pool.request()
+          .input('id', id)
+          .input('avg', avg)
+          .input('count', count)
           .query('UPDATE Products SET Rating = @avg, Reviews = @count WHERE Id = @id');
       } catch (e) {
         console.warn('Failed to update product metrics', e);
       }
 
-      return res.json({ ok: true, review: inserted, avgRating: avg, reviewCount: count, updated: !!existing });
+      // ✅ removed "existing" undefined variable
+      return res.json({ ok: true, review: inserted, avgRating: avg, reviewCount: count });
     } catch (e) {
       console.error('Aggregate after feedback failed', e);
       return res.status(500).json({ error: 'Failed to compute aggregates', detail: String(e) });
@@ -253,7 +304,6 @@ app.post('/api/products/:id/reviews', authMiddleware(), async (req, res) => {
     res.status(500).json({ error: String(err) });
   }
 });
-
 
 app.get('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
   try {
@@ -274,12 +324,12 @@ app.get('/api/admin/feedbacks', authMiddleware(['admin']), async (req, res) => {
     // detect created column name
     let createdColForRead = 'CreatedAt';
     try {
-      const cck2 = await pool.request().input('tbl','Feedback').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME LIKE 'Created%'");
+      const cck2 = await pool.request()
+        .input('tbl','Feedback')
+        .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME LIKE 'Created%'");
       if ((cck2.recordset || []).length) createdColForRead = cck2.recordset[0].COLUMN_NAME;
     } catch (e) {}
 
-    // attempt to join Feedback with Products to show product name
-    // Prefer latest reply from FeedbackReplies if table exists, otherwise fall back to AdminReply columns on Feedback
     const q = `
       SELECT TOP (200)
         f.Id,
@@ -330,40 +380,47 @@ app.post('/api/admin/feedbacks/:id/reply', authMiddleware(['admin']), async (req
         SELECT Id, AdminReply AS ReplyText, AdminReplyName, AdminReplyDate AS CreatedAt
         FROM Feedback WHERE Id = @fid
       `);
-    
-      // Also mirror the reply into the Feedback table's AdminReply columns so public product endpoints see it reliably
-      try {
-        await pool.request()
-          .input('fid', fid)
-          .input('replyText', reply)
-          .input('adminName', req.user.name)
-          .input('replyAt', new Date())
-          .query('UPDATE Feedback SET AdminReply = @replyText, AdminReplyName = @adminName, AdminReplyDate = @replyAt, IsApproved = 1 WHERE Id = @fid');
-      } catch (mirrorErr) {
-        console.warn('Failed to mirror reply into Feedback table:', mirrorErr);
-      }
 
-        // Also insert into FeedbackReplies table if it exists so public endpoints
-        // that prefer FeedbackReplies see the reply immediately.
-        try {
-          const colsRes = await pool.request().input('tbl', 'FeedbackReplies').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
-          const cols = (colsRes.recordset || []).map(r => String(r.COLUMN_NAME || ''));
-          if (cols.length) {
-            const insertCols = [];
-            const params = [];
-            const reqIns = pool.request();
-            if (cols.includes('FeedbackId')) { insertCols.push('FeedbackId'); reqIns.input('FeedbackId', fid); params.push('@FeedbackId'); }
-            if (cols.includes('ReplyText')) { insertCols.push('ReplyText'); reqIns.input('ReplyText', reply); params.push('@ReplyText'); }
-            if (cols.includes('CreatedAt')) { insertCols.push('CreatedAt'); reqIns.input('CreatedAt', new Date()); params.push('@CreatedAt'); }
-            if (cols.includes('CreatedBy') || cols.includes('AdminName')) { const cNameCol = cols.includes('CreatedBy') ? 'CreatedBy' : 'AdminName'; insertCols.push(cNameCol); reqIns.input('CreatedBy', req.user.name); params.push('@CreatedBy'); }
-            if (insertCols.length) {
-              const q = `INSERT INTO FeedbackReplies (${insertCols.join(',')}) VALUES (${params.join(',')})`;
-              try { await reqIns.query(q); } catch (ie) { /* non-fatal */ }
-            }
-          }
-        } catch (frErr) {
-          // ignore - optional enhancement only
+    // Also mirror the reply into the Feedback table's AdminReply columns so public product endpoints see it reliably
+    try {
+      await pool.request()
+        .input('fid', fid)
+        .input('replyText', reply)
+        .input('adminName', req.user.name)
+        .input('replyAt', new Date())
+        .query('UPDATE Feedback SET AdminReply = @replyText, AdminReplyName = @adminName, AdminReplyDate = @replyAt, IsApproved = 1 WHERE Id = @fid');
+    } catch (mirrorErr) {
+      console.warn('Failed to mirror reply into Feedback table:', mirrorErr);
+    }
+
+    // Also insert into FeedbackReplies table if it exists so public endpoints
+    // that prefer FeedbackReplies see the reply immediately.
+    try {
+      const colsRes = await pool.request()
+        .input('tbl', 'FeedbackReplies')
+        .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+      const cols = (colsRes.recordset || []).map(r => String(r.COLUMN_NAME || ''));
+      if (cols.length) {
+        const insertCols = [];
+        const params = [];
+        const reqIns = pool.request();
+        if (cols.includes('FeedbackId')) { insertCols.push('FeedbackId'); reqIns.input('FeedbackId', fid); params.push('@FeedbackId'); }
+        if (cols.includes('ReplyText')) { insertCols.push('ReplyText'); reqIns.input('ReplyText', reply); params.push('@ReplyText'); }
+        if (cols.includes('CreatedAt')) { insertCols.push('CreatedAt'); reqIns.input('CreatedAt', new Date()); params.push('@CreatedAt'); }
+        if (cols.includes('CreatedBy') || cols.includes('AdminName')) {
+          const cNameCol = cols.includes('CreatedBy') ? 'CreatedBy' : 'AdminName';
+          insertCols.push(cNameCol);
+          reqIns.input('CreatedBy', req.user.name);
+          params.push('@CreatedBy');
         }
+        if (insertCols.length) {
+          const q2 = `INSERT INTO FeedbackReplies (${insertCols.join(',')}) VALUES (${params.join(',')})`;
+          try { await reqIns.query(q2); } catch (ie) { /* non-fatal */ }
+        }
+      }
+    } catch (frErr) {
+      // ignore - optional enhancement only
+    }
 
     res.json({ ok: true, reply: upd.recordset[0] });
 
@@ -392,7 +449,6 @@ app.delete('/api/admin/feedbacks/:id', authMiddleware(['admin']), async (req, re
   }
 });
 
-
 // Admin: create product
 app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
   const allowed = ['Name','name','Price','price','OriginalPrice','ImageUrl','Description','Rating','Reviews','Stock','Category','Status'];
@@ -412,6 +468,7 @@ app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
   } catch (e) {
     body.Discount = 0;
   }
+
   try {
     const pool = await getPool();
     // If DB defines Discount as a computed column, remove it from the insert body
@@ -421,7 +478,7 @@ app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
       const isComputed = colQ.recordset && colQ.recordset[0] && colQ.recordset[0].is_computed;
       if (isComputed) delete body.Discount;
     } catch (e) {
-      // best-effort: if check fails, proceed with insert and let DB report any issue
+      // best-effort
     }
 
     const keys = Object.keys(body).filter(k => allowed.includes(k));
@@ -444,10 +501,11 @@ app.post('/api/admin/products', authMiddleware(['admin']), async (req, res) => {
 app.put('/api/admin/products/:id', authMiddleware(['admin']), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid product id' });
-  const allowed = ['Name','name','Price','price','OriginalPrice','ImageUrl','Description','Rating','Reviews','Stock','Category','Status'];
+  const allowed = ['Name','name','Price','price','OriginalPrice','ImageUrl','Description','Rating','Reviews','Stock','Category','Status','Discount'];
   const updates = req.body || {};
   const keys = Object.keys(updates).filter(k => allowed.includes(k));
   if (!keys.length) return res.status(400).json({ error: 'No valid fields to update' });
+
   try {
     const pool = await getPool();
     // If Price or OriginalPrice changed, compute new Discount (use existing DB values when needed)
@@ -472,17 +530,14 @@ app.put('/api/admin/products/:id', authMiddleware(['admin']), async (req, res) =
           updates.Discount = disc;
           if (!keys.includes('Discount')) keys.push('Discount');
         } else {
-          // ensure we don't attempt to write Discount
           delete updates.Discount;
         }
       } catch (e) {
-        // If check fails, fall back to attempting to update Discount (DB will error if not allowed)
         updates.Discount = disc;
         if (!keys.includes('Discount')) keys.push('Discount');
       }
     }
 
-    // Build SET clause safely using parameters
     const sets = keys.map((k, i) => `[${k}] = @v${i}`).join(', ');
     const reqP = pool.request();
     keys.forEach((k, i) => reqP.input(`v${i}`, updates[k]));
@@ -520,7 +575,8 @@ app.get('/api/admin/stats', authMiddleware(['admin']), async (req, res) => {
     const totalUsersRes = await pool.request().query('SELECT COUNT(*) AS cnt FROM Users');
     const totalReviewsRes = await pool.request().query('SELECT COUNT(*) AS cnt FROM Feedback');
 
-    const topProductsRes = await pool.request().query(`SELECT TOP (6) Id, Name, Price, ImageUrl, Rating, Reviews FROM Products ORDER BY Reviews DESC`);
+    const topProductsRes = await pool.request()
+      .query(`SELECT TOP (6) Id, Name, Price, ImageUrl, Rating, Reviews FROM Products ORDER BY Reviews DESC`);
 
     const totalProducts = totalProductsRes.recordset[0].cnt || 0;
     const totalUsers = totalUsersRes.recordset[0].cnt || 0;
@@ -528,7 +584,6 @@ app.get('/api/admin/stats', authMiddleware(['admin']), async (req, res) => {
     const topProducts = topProductsRes.recordset || [];
 
     // For charts, if Orders table doesn't exist we return empty monthly data
-    // Attempt to compute last 6 months sales if Orders/OrderItems tables exist (best-effort)
     let monthly = [];
     try {
       const q = await pool.request().query(`
@@ -541,7 +596,6 @@ app.get('/api/admin/stats', authMiddleware(['admin']), async (req, res) => {
       `);
       monthly = q.recordset || [];
     } catch (e) {
-      // orders not available; fallback to zeros
       monthly = [
         { month: 'Jan', sales: 0, orders: 0 },
         { month: 'Feb', sales: 0, orders: 0 },
@@ -563,7 +617,6 @@ app.get('/api/admin/stats', authMiddleware(['admin']), async (req, res) => {
 app.get('/api/admin/orders', authMiddleware(['admin']), async (req, res) => {
   try {
     const pool = await getPool();
-    // Try basic Orders table; adapt as needed for your schema
     try {
       const orders = await pool.request().query(`
         SELECT TOP (200) o.*, (
@@ -573,13 +626,13 @@ app.get('/api/admin/orders', authMiddleware(['admin']), async (req, res) => {
         ORDER BY o.CreatedAt DESC
       `);
       let list = orders.recordset || [];
+
       // also include any fallback JSON-stored orders
       try {
         const storePath = path.join(__dirname, 'orders_store.json');
         if (fs.existsSync(storePath)) {
           const raw = fs.readFileSync(storePath, 'utf8');
           const fileOrders = JSON.parse(raw || '[]');
-          // compute ItemsCount for fallback orders when possible
           const enrichedFileOrders = (fileOrders || []).map(o => {
             const items = o.items || o.Items || o.OrderItems || [];
             return { ...o, ItemsCount: Array.isArray(items) ? items.length : (o.ItemsCount || 0) };
@@ -589,6 +642,7 @@ app.get('/api/admin/orders', authMiddleware(['admin']), async (req, res) => {
       } catch (fe) {
         console.warn('Failed to read orders_store.json', fe.message);
       }
+
       // Merge lightweight branch mapping if present
       try {
         const mappingPath = path.join(__dirname, 'order_branches.json');
@@ -610,10 +664,11 @@ app.get('/api/admin/orders', authMiddleware(['admin']), async (req, res) => {
       } catch (me) {
         console.warn('Failed to merge order branch mapping', me.message || me);
       }
+
       return res.json(list);
     } catch (e) {
-      // Table missing or different schema
       console.warn('Orders table unavailable or different schema:', e.message);
+
       // return JSON-stored orders if available
       try {
         const storePath = path.join(__dirname, 'orders_store.json');
@@ -640,10 +695,10 @@ app.get('/api/admin/orders/:id', authMiddleware(['admin']), async (req, res) => 
   try {
     const pool = await getPool();
     try {
-      // Select order
       const ordRes = await pool.request().input('id', id).query('SELECT TOP (1) * FROM Orders WHERE Id = @id');
       if (ordRes.recordset.length === 0) return res.status(404).json({ error: 'Order not found' });
       const order = ordRes.recordset[0];
+
       // Merge branch mapping for single order if present
       try {
         const mappingPath = path.join(__dirname, 'order_branches.json');
@@ -660,6 +715,7 @@ app.get('/api/admin/orders/:id', authMiddleware(['admin']), async (req, res) => 
       } catch (me) {
         console.warn('Failed to merge single order branch mapping', me.message || me);
       }
+
       // select items
       let items = [];
       try {
@@ -709,8 +765,8 @@ app.get('/api/admin/orders/:id', authMiddleware(['admin']), async (req, res) => 
       const out = { ...order, items: outItems };
       return res.json(out);
     } catch (e) {
-      // Orders table might not exist; fallback to JSON store
       console.warn('Orders table read failed:', e.message);
+      // fallback to JSON store
       try {
         const storePath = path.join(__dirname, 'orders_store.json');
         if (fs.existsSync(storePath)) {
@@ -737,7 +793,6 @@ app.delete('/api/admin/orders/:id', authMiddleware(['admin']), async (req, res) 
   try {
     const pool = await getPool();
     try {
-      // delete order items then order
       await pool.request().input('id', id).query('DELETE FROM OrderItems WHERE OrderId = @id; DELETE FROM Orders WHERE Id = @id;');
       return res.json({ ok: true, deletedId: id });
     } catch (dbErr) {
@@ -770,6 +825,8 @@ app.delete('/api/admin/orders/:id', authMiddleware(['admin']), async (req, res) 
 // Create order endpoint: tries DB insert, falls back to JSON file storage
 app.post('/api/orders', async (req, res) => {
   const payload = req.body || {};
+  let tx = null;
+
   try {
     const pool = await getPool();
     try {
@@ -780,28 +837,27 @@ app.post('/api/orders', async (req, res) => {
       const totalFromPayload = Number(payload.total ?? payload.Total) || 0;
       const total = totalFromPayload || Math.max(0, subtotal - discount);
 
-      let tx = null;
       tx = pool.transaction();
       await tx.begin();
-      const req = tx.request();
+      const reqTx = tx.request();
 
-      req.input('CustomerName', sql.NVarChar(150), payload.name || payload.CustomerName || null);
-      req.input('Phone', sql.NVarChar(50), payload.phone || payload.Phone || null);
-      req.input('Address', sql.NVarChar(300), payload.address || payload.Address || null);
-      req.input('PaymentMethod', sql.NVarChar(50), payload.payment || payload.PaymentMethod || null);
-      req.input('DeliveryMethod', sql.NVarChar(50), payload.deliveryMethod || payload.DeliveryMethod || null);
-      req.input('Status', sql.NVarChar(50), payload.status || payload.Status || 'Pending');
-      req.input('Subtotal', sql.Decimal(18,2), subtotal || 0);
-      req.input('Discount', sql.Decimal(18,2), discount || 0);
-      req.input('Total', sql.Decimal(18,2), total || 0);
+      reqTx.input('CustomerName', sql.NVarChar(150), payload.name || payload.CustomerName || null);
+      reqTx.input('Phone', sql.NVarChar(50), payload.phone || payload.Phone || null);
+      reqTx.input('Address', sql.NVarChar(300), payload.address || payload.Address || null);
+      reqTx.input('PaymentMethod', sql.NVarChar(50), payload.payment || payload.PaymentMethod || null);
+      reqTx.input('DeliveryMethod', sql.NVarChar(50), payload.deliveryMethod || payload.DeliveryMethod || null);
+      reqTx.input('Status', sql.NVarChar(50), payload.status || payload.Status || 'Pending');
+      reqTx.input('Subtotal', sql.Decimal(18,2), subtotal || 0);
+      reqTx.input('Discount', sql.Decimal(18,2), discount || 0);
+      reqTx.input('Total', sql.Decimal(18,2), total || 0);
 
       // Detect Orders table columns and include branch/store fields when available
       let extraColumns = [];
       let extraInsertParams = [];
       try {
-        const colsRes = await pool.request().input('tbl', 'Orders').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+        const colsRes = await pool.request().input('tbl', 'Orders')
+          .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
         const names = (colsRes.recordset || []).map(r => String(r.COLUMN_NAME || ''));
-        // common branch/store and city column candidates
         const branchIdCandidates = ['BranchId','BranchID','StoreId','StoreID'];
         const branchNameCandidates = ['BranchName','Branch','StoreName','Store'];
         const cityCandidates = ['City','CityName','Town','Region','ShippingCity','DeliveryCity'];
@@ -810,7 +866,7 @@ app.post('/api/orders', async (req, res) => {
         const foundCity = cityCandidates.find(c => names.includes(c));
         if (foundBranchId) {
           extraColumns.push(foundBranchId);
-          extraInsertParams.push({ param: foundBranchId, value: payload.branchId ?? payload.branchId ?? payload.branch ?? null, type: sql.NVarChar(100) });
+          extraInsertParams.push({ param: foundBranchId, value: payload.branchId ?? payload.branch ?? null, type: sql.NVarChar(100) });
         }
         if (foundBranchName) {
           extraColumns.push(foundBranchName);
@@ -821,12 +877,12 @@ app.post('/api/orders', async (req, res) => {
           extraInsertParams.push({ param: foundCity, value: payload.city ?? payload.City ?? null, type: sql.NVarChar(150) });
         }
       } catch (colErr) {
-        // ignore and proceed without extra columns
+        // ignore
       }
 
       // attach extra inputs to request
       extraInsertParams.forEach(p => {
-        req.input(p.param, p.type, p.value);
+        reqTx.input(p.param, p.type, p.value);
       });
 
       // Build INSERT statement dynamically to include optional columns
@@ -835,8 +891,9 @@ app.post('/api/orders', async (req, res) => {
       const allCols = baseCols.concat(extraColumns);
       const allParams = baseParams.concat(extraInsertParams.map(p => `@${p.param}`));
       const insertOrderSql = `INSERT INTO Orders (${allCols.map(c => `[${c}]`).join(',')}) OUTPUT INSERTED.Id VALUES (${allParams.join(',')})`;
-      const inserted = await req.query(insertOrderSql);
-      const orderId = inserted.recordset && inserted.recordset[0] && (inserted.recordset[0].Id || inserted.recordset[0].id || inserted.recordset[0].ID) || null;
+
+      const inserted = await reqTx.query(insertOrderSql);
+      const orderId = (inserted.recordset && inserted.recordset[0] && (inserted.recordset[0].Id || inserted.recordset[0].id || inserted.recordset[0].ID)) || null;
 
       if (orderId && items.length) {
         // batch fetch product metadata for snapshot (Name, ImageUrl)
@@ -851,7 +908,6 @@ app.post('/api/orders', async (req, res) => {
               (resProds.recordset || []).forEach((p) => { prodById[String(p.Id)] = p; });
             }
           } catch (pe) {
-            // ignore product lookup failures
             console.warn('Product lookup failed for order snapshot:', pe.message);
           }
         }
@@ -873,11 +929,10 @@ app.post('/api/orders', async (req, res) => {
       }
 
       await tx.commit();
-      // If DB did not have branch/store columns but client provided branchName,
-      // persist a lightweight mapping so admin UI can display selected branch.
+
+      // Persist lightweight mapping when client provided branchName or city
       try {
         const mappingPath = path.join(__dirname, 'order_branches.json');
-        // Persist lightweight mapping when client provided branchName or city
         if (payload.branchName || payload.city) {
           let map = {};
           if (fs.existsSync(mappingPath)) {
@@ -895,9 +950,9 @@ app.post('/api/orders', async (req, res) => {
       console.warn('DB insert failed, falling back to JSON store:', dbErr.message);
       try {
         if (tx) {
-          try { await tx.rollback(); } catch (e) { /* ignore */ }
+          try { await tx.rollback(); } catch (e) {}
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {}
       // fallback to file store below
     }
   } catch (e) {
@@ -924,7 +979,6 @@ app.post('/api/orders', async (req, res) => {
 });
 
 // Search products by name (query param: q)
-// backend/index.js
 app.get('/api/products/search', async (req, res) => {
   const searchTerm = (req.query.q || '').trim();
 
@@ -965,6 +1019,7 @@ app.get('/api/products/search', async (req, res) => {
 app.get('/api/products/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid product id' });
+
   try {
     const pool = await getPool();
     const prodRes = await pool.request()
@@ -983,30 +1038,38 @@ app.get('/api/products/:id', async (req, res) => {
         FROM Products
         WHERE Id = @id
       `);
+
     if (!prodRes.recordset.length) return res.status(404).json({ error: 'Product not found' });
     const product = prodRes.recordset[0];
 
     // aggregate reviews from Feedback table (approved only) if exists
     try {
-      const agg = await pool.request().input('id', id).query(`SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1`);
+      const agg = await pool.request()
+        .input('id', id)
+        .query(`SELECT AVG(CAST(Rating AS FLOAT)) AS AvgRating, COUNT(*) AS ReviewCount FROM Feedback WHERE ProductId = @id AND IsApproved = 1`);
+
       const row = agg.recordset[0] || { AvgRating: null, ReviewCount: 0 };
       const avg = row.AvgRating !== null ? Number(row.AvgRating) : (product.Rating ?? 0);
       const count = Number(row.ReviewCount || product.Reviews || 0);
 
-      // fetch recent approved feedback (map DB created column to CreatedAt)
+      // fetch recent approved feedback
       let reviewsList = [];
       try {
         // detect created column (handle CreatedAt or Created_at)
         let createdColForRead = 'CreatedAt';
         try {
-          const cck2 = await pool.request().input('tbl','Feedback').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME LIKE 'Created%'");
+          const cck2 = await pool.request()
+            .input('tbl','Feedback')
+            .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl AND COLUMN_NAME LIKE 'Created%'");
           if ((cck2.recordset || []).length) createdColForRead = cck2.recordset[0].COLUMN_NAME;
         } catch (e) {}
 
         // include admin reply if present. Avoid referencing FeedbackReplies if the table doesn't exist.
         let repliesTableExists = false;
         try {
-          const tcheck = await pool.request().input('tbl', 'FeedbackReplies').query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @tbl");
+          const tcheck = await pool.request()
+            .input('tbl', 'FeedbackReplies')
+            .query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @tbl");
           repliesTableExists = (tcheck.recordset || []).length > 0;
         } catch (tce) {
           repliesTableExists = false;
@@ -1038,7 +1101,6 @@ app.get('/api/products/:id', async (req, res) => {
         reviewsList = [];
       }
 
-      // return combined product info
       const out = {
         Id: product.Id,
         Name: product.Name,
@@ -1073,8 +1135,6 @@ app.get('/api/products/:id', async (req, res) => {
   }
 });
 
-
-
 // Get consoles (adjust table name if needed)
 app.get('/api/consoles', async (req, res) => {
   try {
@@ -1100,8 +1160,7 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// Login endpoint (very basic example - replace with proper auth and hashing!)
-// POST /api/login
+// Login endpoint
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
@@ -1112,7 +1171,8 @@ app.post('/api/login', async (req, res) => {
     // Detect surname-like column and include it in select if present
     let surnameColLogin = null;
     try {
-      const cols = await pool.request().input('tbl', 'Users').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+      const cols = await pool.request().input('tbl', 'Users')
+        .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
       const names = (cols.recordset || []).map(r => String(r.COLUMN_NAME || ''));
       surnameColLogin = names.find(n => /surname|last.?name/i.test(n)) || null;
     } catch (e) {
@@ -1122,12 +1182,11 @@ app.post('/api/login', async (req, res) => {
     const selectCols = ['Id', 'Name', 'Email', 'Password', 'Role', 'Status'];
     // include IsVerified if the column exists so we can block unverified logins
     try {
-      const cols2 = await pool.request().input('tbl','Users').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+      const cols2 = await pool.request().input('tbl','Users')
+        .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
       const names2 = (cols2.recordset || []).map(r => String(r.COLUMN_NAME || ''));
       if (names2.includes('IsVerified')) selectCols.push('IsVerified');
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
     if (surnameColLogin) selectCols.push(`[${surnameColLogin}] AS Surname`);
 
     const result = await pool.request()
@@ -1148,18 +1207,15 @@ app.post('/api/login', async (req, res) => {
       if (!isVerifiedVal) return res.status(403).json({ error: 'Please verify your email first' });
     }
 
-    // Check password
     const valid = await bcrypt.compare(password, user.Password);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-    // JWT token: keep payload minimal (only id). Role will be loaded from DB per request.
-    const displayName = user.Surname ? `${user.Name} ${user.Surname}` : user.Name;
     const token = jwt.sign({ id: user.Id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
 
     const respUser = { Id: user.Id, Name: user.Name, Email: user.Email, Role: user.Role };
     if (user.Surname) respUser.Surname = user.Surname;
-    res.json({ ok: true, user: respUser, token });
 
+    res.json({ ok: true, user: respUser, token });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: String(err) });
@@ -1169,35 +1225,31 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/register', registerLimiter, async (req, res) => {
   const { name, surname, email, password } = req.body;
   console.log('POST /api/register body:', req.body);
-  // stricter validation
+
   if (!name || !name.toString().trim() || !email || !email.toString().trim() || !password || !password.toString().trim()) {
     return res.status(400).json({ error: 'All fields required: name, email, password' });
   }
 
-  // Normalize and validate email early to avoid duplicates like Test@.. vs test@..
   const emailNormalized = String(email).toLowerCase().trim();
 
-  // Email format validation (backend must enforce this)
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(emailNormalized)) {
     return res.status(400).json({ error: 'Invalid email format' });
   }
 
-  // Password strength: minimum 8 characters (suggest stronger regex if desired)
   if (!password || password.toString().length < 8) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
   try {
     const pool = await getPool();
-    // Check if email exists
-    const existing = await pool.request().input('email', emailNormalized).query('SELECT Id FROM Users WHERE LOWER(Email) = LOWER(@email)');
+
+    const existing = await pool.request()
+      .input('email', emailNormalized)
+      .query('SELECT Id FROM Users WHERE LOWER(Email) = LOWER(@email)');
     if (existing.recordset.length > 0) return res.status(400).json({ error: 'Bu mail artıq qeydiyyatdan keçib' });
 
-    // Hash password
     const hashed = await bcrypt.hash(password, 10);
-
-    // New users will be marked verified immediately (IsVerified = 1)
 
     // Allow role assignment only by an authenticated admin (verify role via DB)
     let role = 'user';
@@ -1214,21 +1266,17 @@ app.post('/api/register', registerLimiter, async (req, res) => {
             if (adminRow && String(adminRow.Role || '').toLowerCase() === 'admin') {
               role = req.body.role;
             }
-          } catch (innerErr) {
-            // ignore DB errors and fall back to default 'user'
-          }
+          } catch (innerErr) {}
         }
-      } catch (e) {
-        // ignore invalid token - default to user
-      }
+      } catch (e) {}
     }
 
-    // Insert user and return created row
     // Detect Users table columns (to know whether EmailVerifyToken / IsVerified exist)
     let surnameCol = null;
     let userCols = [];
     try {
-      const cols = await pool.request().input('tbl', 'Users').query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
+      const cols = await pool.request().input('tbl', 'Users')
+        .query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl");
       userCols = (cols.recordset || []).map(r => String(r.COLUMN_NAME || ''));
       surnameCol = userCols.find(n => /surname|last.?name/i.test(n)) || null;
     } catch (e) {
@@ -1254,7 +1302,6 @@ app.post('/api/register', registerLimiter, async (req, res) => {
         .input('role', role)
         .query(`INSERT INTO Users (${colsList}) OUTPUT INSERTED.* VALUES (${vals})`);
     } else {
-      // fallback: store full name in Name column
       const full = surname ? `${name} ${surname}` : name;
       result = await pool.request()
         .input('name', full)
@@ -1266,7 +1313,7 @@ app.post('/api/register', registerLimiter, async (req, res) => {
 
     let user = result.recordset[0];
 
-    // Defensive: ensure the user row is marked verified and any token cleared (in case DB triggers exist)
+    // Defensive: ensure verified and clear token
     try {
       await pool.request().input('id', user.Id).query('UPDATE Users SET IsVerified = 1, EmailVerifyToken = NULL WHERE Id = @id');
       const refreshed = await pool.request().input('id', user.Id).query('SELECT TOP 1 * FROM Users WHERE Id = @id');
@@ -1275,11 +1322,9 @@ app.post('/api/register', registerLimiter, async (req, res) => {
       console.warn('Failed to enforce IsVerified on created user:', e);
     }
 
-    // JWT token: minimal payload (id only)
     const token = jwt.sign({ id: user.Id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
 
     res.json({ ok: true, user, token });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: String(err) });
@@ -1317,14 +1362,13 @@ app.get('/api/verify-email/:token', async (req, res) => {
   }
 });
 
-
 // Generic SQL executor (admin/debug) - use carefully
 app.post('/api/query', authMiddleware(['admin']), async (req, res) => {
-  const { sql } = req.body;
-  if (!sql) return res.status(400).json({ error: 'sql required' });
+  const { sql: sqlText } = req.body;
+  if (!sqlText) return res.status(400).json({ error: 'sql required' });
   try {
     const pool = await getPool();
-    const result = await pool.request().query(sql);
+    const result = await pool.request().query(sqlText);
     res.json(result.recordset);
   } catch (err) {
     console.error(err);
@@ -1340,6 +1384,7 @@ app.put('/api/admin/users/:id', authMiddleware(['admin']), async (req, res) => {
   const body = req.body || {};
   const keys = Object.keys(body).filter(k => allowed.includes(k));
   if (!keys.length) return res.status(400).json({ error: 'No valid fields to update' });
+
   try {
     const pool = await getPool();
     const sets = keys.map((k, i) => {
@@ -1376,18 +1421,21 @@ app.delete('/api/admin/users/:id', authMiddleware(['admin']), async (req, res) =
 app.post('/api/admin/users', authMiddleware(['admin']), async (req, res) => {
   const { name, email, role, password } = req.body || {};
   if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
+
   try {
     const pool = await getPool();
-    // normalize email
     const emailNormalized = String(email).toLowerCase().trim();
-    // check existing
-    const exists = await pool.request().input('email', emailNormalized).query('SELECT Id FROM Users WHERE LOWER(Email) = LOWER(@email)');
+
+    const exists = await pool.request()
+      .input('email', emailNormalized)
+      .query('SELECT Id FROM Users WHERE LOWER(Email) = LOWER(@email)');
     if (exists.recordset.length > 0) return res.status(400).json({ error: 'Email already exists' });
 
     const plain = password && String(password).trim() ? String(password) : Math.random().toString(36).slice(-8);
     const hashed = await bcrypt.hash(plain, 10);
     const userRole = role ? String(role) : 'user';
     const userStatus = req.body && req.body.status ? String(req.body.status) : 'active';
+
     const ins = await pool.request()
       .input('name', name)
       .input('email', emailNormalized)

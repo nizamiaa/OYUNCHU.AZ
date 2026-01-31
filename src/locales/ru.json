@@ -187,7 +187,9 @@
         "confirmPassword": "Подтвердите пароль",
         "alreadyHaveAccount": "Уже есть аккаунт?",
         "login": "Войти",
-        "createAccount": "Создать аккаунт"
+        "createAccount": "Создать аккаунт",
+        "namePlaceholder": "Ваше имя",
+        "surnamePlaceholder": "Ваша фамилия"
     },
 
     "wishlist": {

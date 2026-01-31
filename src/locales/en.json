@@ -187,7 +187,9 @@
         "confirmPassword": "Confirm Password",
         "alreadyHaveAccount": "Already have an account?",
         "login": "Login",
-        "createAccount": "Create Account"
+        "createAccount": "Create Account",
+        "namePlaceholder": "Your Name",
+        "surnamePlaceholder": "Your Surname"
     },
 
     "wishlist": {

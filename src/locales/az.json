@@ -189,7 +189,9 @@
         "confirmPassword": "Şifrəni təsdiqlə",
         "alreadyHaveAccount": "Hesabınız var?",
         "login": "Daxil ol",
-        "createAccount": "Hesab yarat"
+        "createAccount": "Hesab yarat",
+        "namePlaceholder": "Adınız",
+        "surnamePlaceholder": "Soyadınız"
     },
 
     "wishlist": {

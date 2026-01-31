@@ -107,7 +107,9 @@
         "totalAmount": "Total Amount",
         "discountAmount": "Discount Amount",
         "finalAmount": "Final Amount",
-        "checkout": "Proceed to Checkout"
+        "checkout": "Proceed to Checkout",
+        "summary": "Summary",
+        "discount":"Discount"
     },
 
     "categories": {

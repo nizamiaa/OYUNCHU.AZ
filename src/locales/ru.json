@@ -107,7 +107,9 @@
         "totalAmount": "Общая сумма",
         "discountAmount": "Сумма скидки",
         "finalAmount": "Итоговая сумма",
-        "checkout": "Перейти к оформлению заказа"
+        "checkout": "Перейти к оформлению заказа",
+        "summary": "Итог",
+        "discount":"Скидка"
     },
 
     "categories": {

@@ -107,7 +107,9 @@
         "totalAmount": "Ümumi məbləğ",
         "discountAmount": "Endirim məbləği",
         "finalAmount": "Yekun məbləğ",
-        "checkout": "Sifarişi rəsmiləşdir"
+        "checkout": "Sifarişi rəsmiləşdir",
+        "summary": "Yekun",
+        "discount":"Endirim"
     },
 
     "categories": {

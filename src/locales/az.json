@@ -43,6 +43,10 @@
     "loginRemember": "Məni yadda saxla",
     "allProducts": "Bütün Məhsullar",
     "bestSellers": "Ən çox satılanlar",
+    "filters": "Filtrlər",
+    "apply": "Tətbiq et",
+    "cancel": "Ləğv et",
+    "oginToWishlistPrompt": "Favorilərə əlavə etmək üçün hesabınıza daxil olun.",
 
     "header": {
         "campaigns": "Kampaniyalar",

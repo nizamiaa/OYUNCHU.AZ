@@ -43,6 +43,10 @@
     "loginRemember": "Remember me",
     "allProducts": "All Products",
     "bestSellers": "Best sellers",
+    "filters": "Filters",
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "loginToWishlistPrompt": "Log in to your account to add to favorites.",
 
     "header": {
         "campaigns": "Campaigns",

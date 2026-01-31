@@ -43,6 +43,10 @@
     "loginRemember": "Запомнить меня",
     "allProducts": "Все товары",
     "bestSellers": "Лидеры продаж",
+    "filters": "Фильтры",
+    "apply": "Применить",
+    "cancel": "Отмена",
+    "loginToWishlistPrompt": "Войдите в свой аккаунт, чтобы добавить в избранное.",
 
     "header": {
         "campaigns": "Кампании",

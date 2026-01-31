@@ -64,8 +64,8 @@ export default function Header() {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -83,7 +83,6 @@ export default function Header() {
         const normalized = (res.data || []).map((p: any) => ({
           id: p.Id ?? p.id,
           name: p.Name ?? p.name,
-          description: p.Description ?? p.description ?? '',
           price: p.Price ?? p.price,
           originalPrice: p.OriginalPrice ?? p.originalPrice,
           imageUrl: p.ImageUrl ?? p.imageUrl,
@@ -100,12 +99,9 @@ export default function Header() {
 
             const filtered = (allRes.data || []).filter((p: any) => {
               const name = (p.Name ?? p.name ?? '').toString().toLowerCase();
-              const desc = (p.Description ?? p.description ?? '').toString().toLowerCase();
-              return name.includes(termLower) || desc.includes(termLower);
             }).map((p: any) => ({
               id: p.Id ?? p.id,
               name: p.Name ?? p.name,
-              description: p.Description ?? p.description ?? '',
               price: p.Price ?? p.price,
               originalPrice: p.OriginalPrice ?? p.originalPrice,
               imageUrl: p.ImageUrl ?? p.imageUrl,
@@ -264,14 +260,6 @@ export default function Header() {
                             />
                             <div className="text-sm text-gray-800">
                               <div className="font-medium truncate max-w-[180px]">{p.name}</div>
-                              <div className="text-xs text-gray-500 truncate max-w-[180px]">{p.description}</div>
-                            </div>
-                          </div>
-
-                          <div className="text-right">
-                            <div className="text-xs text-gray-500">{t("price")}</div>
-                            <div className="font-semibold text-blue-600 text-sm">
-                              {p.price ? Number(p.price).toFixed(2) + ' ₼' : '-'}
                             </div>
                           </div>
                         </div>
@@ -352,7 +340,7 @@ export default function Header() {
               >
                 <span className="flex items-center gap-2">
                   <Heart size={18} />
-                  Wishlist
+                  {t("wishlist.title")}
                 </span>
                 <span className="text-sm text-gray-600">{wishlistItems.length}</span>
               </button>
@@ -541,7 +529,6 @@ export default function Header() {
                             />
                             <div className="text-sm text-gray-800">
                               <div className="font-medium truncate max-w-[240px]">{p.name}</div>
-                              <div className="text-xs text-gray-500 truncate">{p.description}</div>
                             </div>
                           </div>
 

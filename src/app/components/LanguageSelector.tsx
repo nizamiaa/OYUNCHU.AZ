@@ -15,47 +15,38 @@ export const LanguageSelector: React.FC = () => {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [currentLang, setCurrentLang] = useState<string>(() => {
-    // prefer i18n runtime language when available, fallback to saved lang or az
     try {
-      return (i18n && (i18n as any).language) || localStorage.getItem("lang") || "az";
-    } catch (e) {
-      return localStorage.getItem("lang") || "az";
+      return i18n.language || localStorage.getItem("lang") || "az";
+    } catch {
+      return "az";
     }
   });
+
   const ref = useRef<HTMLDivElement>(null);
 
+  /* close on outside click */
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
+    const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  /* sync when language changed elsewhere */
   useEffect(() => {
-    const handleLanguageChange = (lng: string) => setCurrentLang(lng);
-    try {
-      if (i18n && typeof (i18n as any).on === 'function') {
-        (i18n as any).on("languageChanged", handleLanguageChange);
-        return () => { if (i18n && typeof (i18n as any).off === 'function') (i18n as any).off("languageChanged", handleLanguageChange); };
-      }
-    } catch (e) {
-      // i18n may not implement event emitter in this environment; ignore
-    }
-    return () => {};
+    const onChange = (lng: string) => setCurrentLang(lng);
+    i18n.on("languageChanged", onChange);
+    return () => i18n.off("languageChanged", onChange);
   }, [i18n]);
 
-  const current = LANGUAGES.find((l) => l.code === currentLang) || LANGUAGES[0];
+  const current =
+    LANGUAGES.find((l) => l.code === currentLang) || LANGUAGES[0];
 
   const changeLanguage = (code: string) => {
-    // update i18n, persist selection and update local state immediately
-    try {
-      i18n.changeLanguage(code);
-    } catch (e) {
-      console.warn('i18n.changeLanguage failed', e);
-    }
+    i18n.changeLanguage(code);
     localStorage.setItem("lang", code);
     setCurrentLang(code);
     setOpen(false);
@@ -63,46 +54,45 @@ export const LanguageSelector: React.FC = () => {
 
   return (
     <div ref={ref} className="relative select-none">
+      {/* Trigger */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="
-          relative flex-shrink-0
-          p-2 sm:p-3
-          rounded-full
-        "
+        className="flex items-center justify-center p-2 rounded-full hover:bg-gray-100 transition"
         aria-haspopup="dialog"
         aria-expanded={open}
       >
         <img
           src={current.flag}
           alt={current.label}
-          className="w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 rounded-full border
-          "
+          className="w-7 h-7 sm:w-9 sm:h-9 rounded-full border"
         />
       </button>
 
-
+      {/* Modal */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center"
           onClick={() => setOpen(false)}
         >
           <div
-            className="bg-[#222] rounded-xl p-6 w-full max-w-xs relative"
+            className="bg-[#222] rounded-xl p-4 sm:p-6 w-full max-w-[92vw] sm:max-w-sm relative"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Close */}
             <button
               onClick={() => setOpen(false)}
               className="absolute top-3 right-3 text-gray-400 hover:text-white text-xl"
-              aria-label="Bağla"
+              aria-label="Close"
             >
               ×
             </button>
 
-            <h2 className="text-white text-lg font-bold mb-6 text-center">
-              {t("languageSelector.selectLanguage")}
+            {/* Title */}
+            <h2 className="text-white text-lg font-bold mb-5 text-center">
+              {t("languageSelector.selectLanguage", "Select language")}
             </h2>
 
+            {/* Options */}
             <div className="flex flex-col gap-2">
               {LANGUAGES.map((lang) => (
                 <button
@@ -121,7 +111,7 @@ export const LanguageSelector: React.FC = () => {
                     alt={lang.label}
                     className="w-7 h-7 rounded-full border"
                   />
-                  <span>{lang.label}</span>
+                  <span className="min-w-0 truncate">{lang.label}</span>
                 </button>
               ))}
             </div>

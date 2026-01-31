@@ -72,7 +72,8 @@
 
     "branchesPage": {
         "title": "Our Stores",
-        "hours": "Working Hours"
+        "hours": "Working Hours",
+        "subtittle": "Find and visit the nearest store"
     },
 
     "campaignsPage": {

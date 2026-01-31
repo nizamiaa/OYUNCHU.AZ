@@ -72,7 +72,8 @@
 
     "branchesPage": {
         "title": "Наши магазины",
-        "hours": "Часы работы"
+        "hours": "Часы работы",
+        "subtittle": "Найдите и посетите ближайший магазин"
     },
 
     "campaignsPage": {

@@ -72,7 +72,8 @@
 
     "branchesPage": {
         "title": "Mağazalarımız",
-        "hours": "İş saatları"
+        "hours": "İş saatları",
+        "subtitle": "Ən yaxın mağazanı tapın və ziyarət edin"
     },
 
     "campaignsPage": {

@@ -1,54 +1,62 @@
-import { Search, Heart, ShoppingCart, Menu, User, LogOut, Phone, Grid3X3 } from 'lucide-react';
-import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import {
+  Search,
+  Heart,
+  ShoppingCart,
+  Menu,
+  User,
+  LogOut,
+  Grid3X3,
+} from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 import { useCart } from "../components/CartContext";
-import { useAuth } from './AuthContext';
-import { useWishlist } from './WishlistContext';
-import { LanguageSelector } from './LanguageSelector';
-import { useTranslation } from 'react-i18next';
-import logoSrc from '../../images/logo/oyunchu.png';
+import { useAuth } from "./AuthContext";
+import { useWishlist } from "./WishlistContext";
+import { LanguageSelector } from "./LanguageSelector";
+import { useTranslation } from "react-i18next";
+import logoSrc from "../../images/logo/oyunchu.png";
 
 export default function Header() {
   const { t } = useTranslation();
   const { totalQty } = useCart();
   const { items: wishlistItems } = useWishlist();
 
-  const categories = [
-    'PlayStations',
-    'Dualsense',
-    'Nintendo Oyun',
-    'PS4 Oyun',
-    'PS5 Oyun'
-  ];
+  const categories = ["PlayStations", "Dualsense", "Nintendo Oyun", "PS4 Oyun", "PS5 Oyun"];
 
   const categoryQueryMap: Record<string, { key: string; value: string }> = {
-    'PlayStations': { key: 'subCategory', value: 'Playstation 3,Playstation 4,Playstation 5' },
+    PlayStations: { key: "subCategory", value: "Playstation 3,Playstation 4,Playstation 5" },
   };
 
-  const [modal, setModal] = useState<{ open: boolean; mode: 'login' | 'register' }>({
+  const [modal, setModal] = useState<{ open: boolean; mode: "login" | "register" }>({
     open: false,
-    mode: 'login'
+    mode: "login",
   });
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
   const [dropdownVisible, setDropdownVisible] = useState(false);
-  const [categoriesVisible, setCategoriesVisible] = useState(false);
+
+  const [categoriesVisibleMobile, setCategoriesVisibleMobile] = useState(false);
+  const [categoriesVisibleDesktop, setCategoriesVisibleDesktop] = useState(false);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const auth = useAuth();
   const navigate = useNavigate();
 
   const searchRef = useRef<HTMLDivElement>(null);
-  const categoriesRef = useRef<HTMLDivElement>(null);
+  const mobileCategoriesRef = useRef<HTMLDivElement>(null);
+  const desktopCategoriesRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
+  // body scroll lock
   useEffect(() => {
     const locked = modal.open || mobileMenuOpen;
-    document.body.style.overflow = locked ? 'hidden' : 'auto';
+    document.body.style.overflow = locked ? "hidden" : "auto";
   }, [modal.open, mobileMenuOpen]);
 
+  // click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -56,18 +64,25 @@ export default function Header() {
       if (searchRef.current && !searchRef.current.contains(target)) {
         setDropdownVisible(false);
       }
-      if (categoriesRef.current && !categoriesRef.current.contains(target)) {
-        setCategoriesVisible(false);
+
+      if (mobileCategoriesRef.current && !mobileCategoriesRef.current.contains(target)) {
+        setCategoriesVisibleMobile(false);
       }
+
+      if (desktopCategoriesRef.current && !desktopCategoriesRef.current.contains(target)) {
+        setCategoriesVisibleDesktop(false);
+      }
+
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(target)) {
         setMobileMenuOpen(false);
       }
     };
 
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // search debounce
   useEffect(() => {
     if (!searchTerm) {
       setFilteredProducts([]);
@@ -77,8 +92,8 @@ export default function Header() {
 
     const timer = setTimeout(async () => {
       try {
-        const term = String(searchTerm || '').trim();
-        const res = await axios.get('/api/products/search', { params: { q: term } });
+        const term = String(searchTerm || "").trim();
+        const res = await axios.get("/api/products/search", { params: { q: term } });
 
         const normalized = (res.data || []).map((p: any) => ({
           id: p.Id ?? p.id,
@@ -93,20 +108,24 @@ export default function Header() {
           setFilteredProducts(normalized);
           setDropdownVisible(true);
         } else {
+          // fallback: fetch all then filter client side
           try {
-            const allRes = await axios.get('/api/products');
+            const allRes = await axios.get("/api/products");
             const termLower = String(searchTerm).trim().toLowerCase();
 
-            const filtered = (allRes.data || []).filter((p: any) => {
-              const name = (p.Name ?? p.name ?? '').toString().toLowerCase();
-            }).map((p: any) => ({
-              id: p.Id ?? p.id,
-              name: p.Name ?? p.name,
-              price: p.Price ?? p.price,
-              originalPrice: p.OriginalPrice ?? p.originalPrice,
-              imageUrl: p.ImageUrl ?? p.imageUrl,
-              discount: p.Discount ?? p.discount,
-            }));
+            const filtered = (allRes.data || [])
+              .filter((p: any) => {
+                const name = (p.Name ?? p.name ?? "").toString().toLowerCase();
+                return name.includes(termLower); // ✅ FIX: return added
+              })
+              .map((p: any) => ({
+                id: p.Id ?? p.id,
+                name: p.Name ?? p.name,
+                price: p.Price ?? p.price,
+                originalPrice: p.OriginalPrice ?? p.originalPrice,
+                imageUrl: p.ImageUrl ?? p.imageUrl,
+                discount: p.Discount ?? p.discount,
+              }));
 
             setFilteredProducts(filtered);
             setDropdownVisible(filtered.length > 0);
@@ -124,41 +143,56 @@ export default function Header() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const goCategory = (category: string) => {
+  const goCategory = (category: string, mode: "mobile" | "desktop") => {
     const mapped = categoryQueryMap[category];
     const url = mapped
       ? `/products?${mapped.key}=${encodeURIComponent(mapped.value)}`
       : `/products?subCategory=${encodeURIComponent(category)}`;
+
     navigate(url);
-    setCategoriesVisible(false);
-    setMobileMenuOpen(false);
+
+    if (mode === "mobile") {
+      setCategoriesVisibleMobile(false);
+      setMobileMenuOpen(false);
+    } else {
+      setCategoriesVisibleDesktop(false);
+    }
   };
 
   const goLoginOrProfile = () => {
     if (!auth.isAuthenticated) {
-      navigate('/login');
+      navigate("/login");
       setMobileMenuOpen(false);
       return;
     }
     setMobileMenuOpen(false);
   };
 
+  const goSearchPage = () => {
+    const q = searchTerm.trim();
+    if (!q) return;
+    navigate(`/products?search=${encodeURIComponent(q)}`);
+    setDropdownVisible(false);
+  };
+
+  const goProduct = (id: any) => {
+    // safest navigation (no Link timing issues)
+    setDropdownVisible(false);
+    setSearchTerm(""); // optional
+    navigate(`/products/${id}`);
+  };
+
   return (
     <header className="bg-white shadow-md sticky top-0 z-[9999]">
+      {/* ===== MOBILE ===== */}
       <div className="md:hidden border-b">
         <div className="px-3 py-2 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img
-              src={logoSrc}
-              alt="Oyunchu"
-              className="h-15 sm:h-15 w-auto object-contain"
-            />
+            <img src={logoSrc} alt="Oyunchu" className="h-15 sm:h-15 w-auto object-contain" />
           </Link>
 
           <div className="flex items-center gap-2">
-
             <div className="border-l h-5 mx-1" />
-
             <LanguageSelector />
           </div>
 
@@ -184,20 +218,23 @@ export default function Header() {
         <div className="px-3 pb-2">
           <div className="flex items-center gap-2">
             {/* Categories icon button */}
-            <div className="relative" ref={categoriesRef}>
+            <div className="relative" ref={mobileCategoriesRef}>
               <button
-                onClick={() => setCategoriesVisible(v => !v)}
+                onClick={() => setCategoriesVisibleMobile((v) => !v)}
                 className="h-10 w-10 flex items-center justify-center border rounded-lg hover:bg-gray-50 transition"
                 aria-label={t("header.allCategories")}
               >
                 <Grid3X3 size={18} />
               </button>
 
-              {categoriesVisible && (
+              {categoriesVisibleMobile && (
                 <div className="absolute top-full left-0 mt-2 bg-white shadow-xl rounded-xl w-64 py-2 border z-50">
                   <button
                     type="button"
-                    onClick={() => { navigate('/products'); setCategoriesVisible(false); }}
+                    onClick={() => {
+                      navigate("/products");
+                      setCategoriesVisibleMobile(false);
+                    }}
                     className="block w-full text-left px-4 py-2 font-medium hover:bg-blue-50 hover:text-blue-600 transition"
                   >
                     {t("header.allCategories")}
@@ -207,7 +244,7 @@ export default function Header() {
                     <button
                       key={index}
                       type="button"
-                      onClick={() => goCategory(category)}
+                      onClick={() => goCategory(category, "mobile")}
                       className="block w-full text-left px-4 py-2 hover:bg-blue-50 hover:text-blue-600 transition"
                     >
                       {category}
@@ -230,12 +267,7 @@ export default function Header() {
               <button
                 className="absolute right-1 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-gray-100 transition"
                 aria-label="Search"
-                onClick={() => {
-                  const q = searchTerm.trim();
-                  if (!q) return;
-                  navigate(`/products?search=${encodeURIComponent(q)}`);
-                  setDropdownVisible(false);
-                }}
+                onClick={goSearchPage}
               >
                 <Search size={18} />
               </button>
@@ -245,25 +277,23 @@ export default function Header() {
                 <div className="absolute top-full left-0 w-full bg-white shadow-lg rounded-xl mt-2 max-h-72 overflow-y-auto z-50 border">
                   {filteredProducts.length > 0 ? (
                     filteredProducts.map((p: any) => (
-                      <Link
+                      <button
                         key={p.id}
-                        to={`/products/${p.id}`}
-                        className="block px-3 py-2 hover:bg-blue-50"
-                        onClick={() => setDropdownVisible(false)}
+                        type="button"
+                        onMouseDown={() => goProduct(p.id)} // ✅ bulletproof
+                        className="w-full text-left block px-3 py-2 hover:bg-blue-50"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <img
-                              src={p.imageUrl || '/placeholder.png'}
-                              alt={p.name}
-                              className="w-10 h-10 object-cover rounded"
-                            />
-                            <div className="text-sm text-gray-800">
-                              <div className="font-medium truncate max-w-[180px]">{p.name}</div>
-                            </div>
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={p.imageUrl || "/placeholder.png"}
+                            alt={p.name}
+                            className="w-10 h-10 object-cover rounded"
+                          />
+                          <div className="text-sm text-gray-800">
+                            <div className="font-medium truncate max-w-[180px]">{p.name}</div>
                           </div>
                         </div>
-                      </Link>
+                      </button>
                     ))
                   ) : (
                     <div className="px-3 py-2 text-gray-500">{t("header.noResultsFound")}</div>
@@ -293,35 +323,20 @@ export default function Header() {
       {mobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-[9999]">
           <div className="absolute inset-0 bg-black/40" />
-          <div
-            ref={mobileMenuRef}
-            className="absolute right-0 top-0 h-full w-[85%] max-w-sm bg-white shadow-2xl p-4"
-          >
+          <div ref={mobileMenuRef} className="absolute right-0 top-0 h-full w-[85%] max-w-sm bg-white shadow-2xl p-4">
             <div className="flex items-center justify-between mb-4">
               <div className="font-semibold text-gray-900">{t("header.allCategories")}</div>
-              <button
-                className="p-2 rounded-lg hover:bg-gray-100"
-                onClick={() => setMobileMenuOpen(false)}
-                aria-label="Close"
-              >
+              <button className="p-2 rounded-lg hover:bg-gray-100" onClick={() => setMobileMenuOpen(false)} aria-label="Close">
                 ✕
               </button>
             </div>
 
-            {/* quick links */}
             <div className="space-y-2">
-              <Link
-                to="/campaigns"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block px-3 py-2 rounded-lg hover:bg-gray-50"
-              >
+              <Link to="/campaigns" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 rounded-lg hover:bg-gray-50">
                 {t("header.campaigns")}
               </Link>
-              <Link
-                to="/branches"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block px-3 py-2 rounded-lg hover:bg-gray-50"
-              >
+
+              <Link to="/branches" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 rounded-lg hover:bg-gray-50">
                 {t("header.affiliates")}
               </Link>
 
@@ -330,11 +345,11 @@ export default function Header() {
                 className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50"
                 onClick={() => {
                   if (!auth.isAuthenticated) {
-                    setModal({ open: true, mode: 'login' });
+                    setModal({ open: true, mode: "login" });
                     setMobileMenuOpen(false);
                     return;
                   }
-                  navigate('/wishlist');
+                  navigate("/wishlist");
                   setMobileMenuOpen(false);
                 }}
               >
@@ -355,7 +370,7 @@ export default function Header() {
                     <button
                       onClick={async () => {
                         await auth.logout();
-                        navigate('/');
+                        navigate("/");
                         setMobileMenuOpen(false);
                       }}
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 text-red-600"
@@ -376,15 +391,16 @@ export default function Header() {
                 )}
               </div>
 
-              {/* Category shortcuts inside drawer */}
+              {/* Category shortcuts */}
               <div className="border-t pt-3 mt-3">
-                <div className="text-xs font-semibold text-gray-500 px-3 mb-2">
-                  {t("header.allCategories")}
-                </div>
+                <div className="text-xs font-semibold text-gray-500 px-3 mb-2">{t("header.allCategories")}</div>
 
                 <button
                   type="button"
-                  onClick={() => { navigate('/products'); setMobileMenuOpen(false); }}
+                  onClick={() => {
+                    navigate("/products");
+                    setMobileMenuOpen(false);
+                  }}
                   className="block w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition"
                 >
                   {t("header.allCategories")}
@@ -394,7 +410,7 @@ export default function Header() {
                   <button
                     key={index}
                     type="button"
-                    onClick={() => goCategory(category)}
+                    onClick={() => goCategory(category, "mobile")}
                     className="block w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition"
                   >
                     {category}
@@ -406,6 +422,7 @@ export default function Header() {
         </div>
       )}
 
+      {/* ===== DESKTOP ===== */}
       <div className="hidden md:block">
         {/* Top Header */}
         <div className="bg-blue-600 text-white py-1 px-4">
@@ -419,8 +436,12 @@ export default function Header() {
             </Link>
 
             <div className="flex gap-6">
-              <Link to="/campaigns" className="hover:text-orange-400 transition">{t("header.campaigns")}</Link>
-              <Link to="/branches" className="hover:text-orange-400 transition">{t("header.affiliates")}</Link>
+              <Link to="/campaigns" className="hover:text-orange-400 transition">
+                {t("header.campaigns")}
+              </Link>
+              <Link to="/branches" className="hover:text-orange-400 transition">
+                {t("header.affiliates")}
+              </Link>
             </div>
 
             <div className="flex items-center gap-4">
@@ -430,7 +451,10 @@ export default function Header() {
                     {t("header.hello")}, <span className="font-semibold">{auth.user.name}</span>
                   </div>
                   <button
-                    onClick={async () => { await auth.logout(); navigate('/'); }}
+                    onClick={async () => {
+                      await auth.logout();
+                      navigate("/");
+                    }}
                     className="flex items-center gap-1 hover:text-orange-400 transition"
                     aria-label="Logout"
                   >
@@ -453,20 +477,23 @@ export default function Header() {
         <div className="bg-white py-2 px-4 border-b">
           <div className="container mx-auto flex justify-between items-center">
             {/* Categories */}
-            <div className="relative" ref={categoriesRef}>
+            <div className="relative" ref={desktopCategoriesRef}>
               <button
-                onClick={() => setCategoriesVisible(v => !v)}
+                onClick={() => setCategoriesVisibleDesktop((v) => !v)}
                 className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition"
               >
                 <Menu size={20} />
                 <span>{t("header.allCategories")}</span>
               </button>
 
-              {categoriesVisible && (
+              {categoriesVisibleDesktop && (
                 <div className="absolute top-full left-0 mt-1 bg-white shadow-xl rounded-lg w-64 py-2 border z-50">
                   <button
                     type="button"
-                    onClick={() => { navigate('/products'); setCategoriesVisible(false); }}
+                    onClick={() => {
+                      navigate("/products");
+                      setCategoriesVisibleDesktop(false);
+                    }}
                     className="block w-full text-left px-4 py-2 font-medium hover:bg-blue-50 hover:text-blue-600 transition"
                   >
                     {t("header.allCategories")}
@@ -476,7 +503,7 @@ export default function Header() {
                     <button
                       key={index}
                       type="button"
-                      onClick={() => goCategory(category)}
+                      onClick={() => goCategory(category, "desktop")}
                       className="block w-full text-left px-4 py-2 hover:bg-blue-50 hover:text-blue-600 transition"
                     >
                       {category}
@@ -498,12 +525,7 @@ export default function Header() {
               />
               <button
                 className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition"
-                onClick={() => {
-                  const q = searchTerm.trim();
-                  if (!q) return;
-                  navigate(`/products?search=${encodeURIComponent(q)}`);
-                  setDropdownVisible(false);
-                }}
+                onClick={goSearchPage}
                 aria-label="Search"
               >
                 <Search size={20} />
@@ -514,32 +536,23 @@ export default function Header() {
                 <div className="absolute top-full left-0 w-full bg-white shadow-lg rounded-lg mt-1 max-h-64 overflow-y-auto z-50">
                   {filteredProducts.length > 0 ? (
                     filteredProducts.map((p: any) => (
-                      <Link
+                      <button
                         key={p.id}
-                        to={`/products/${p.id}`}
-                        className="block px-4 py-2 hover:bg-blue-50"
-                        onClick={() => setDropdownVisible(false)}
+                        type="button"
+                        onMouseDown={() => goProduct(p.id)} // ✅ bulletproof
+                        className="w-full text-left block px-4 py-2 hover:bg-blue-50"
                       >
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={p.imageUrl || '/placeholder.png'}
-                              alt={p.name}
-                              className="w-12 h-12 object-cover rounded"
-                            />
-                            <div className="text-sm text-gray-800">
-                              <div className="font-medium truncate max-w-[240px]">{p.name}</div>
-                            </div>
-                          </div>
-
-                          <div className="text-right">
-                            <div className="text-sm text-gray-500">{t("price")}</div>
-                            <div className="font-semibold text-blue-600">
-                              {p.price ? Number(p.price).toFixed(2) + ' ₼' : '-'}
-                            </div>
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={p.imageUrl || "/placeholder.png"}
+                            alt={p.name}
+                            className="w-12 h-12 object-cover rounded"
+                          />
+                          <div className="text-sm text-gray-800">
+                            <div className="font-medium truncate max-w-[240px]">{p.name}</div>
                           </div>
                         </div>
-                      </Link>
+                      </button>
                     ))
                   ) : (
                     <div className="px-4 py-2 text-gray-500">{t("header.noResultsFound")}</div>
@@ -554,16 +567,16 @@ export default function Header() {
                 className="relative p-2 hover:bg-gray-100 rounded-lg transition"
                 onClick={() => {
                   if (!auth.isAuthenticated) {
-                    setModal({ open: true, mode: 'login' });
+                    setModal({ open: true, mode: "login" });
                     return;
                   }
-                  navigate('/wishlist');
+                  navigate("/wishlist");
                 }}
               >
                 <Heart
                   size={24}
-                  className={wishlistItems.length > 0 ? 'text-red-600' : 'text-blue-600'}
-                  fill={wishlistItems.length > 0 ? 'currentColor' : 'none'}
+                  className={wishlistItems.length > 0 ? "text-red-600" : "text-blue-600"}
+                  fill={wishlistItems.length > 0 ? "currentColor" : "none"}
                 />
                 <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
                   {wishlistItems.length}
@@ -583,7 +596,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* MODAL */}
+      {/* ===== MODAL ===== */}
       {modal.open && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center">
           <div
@@ -593,12 +606,14 @@ export default function Header() {
           <div className="relative z-10 bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">
-                {modal.mode === 'login' ? t('header.login') : t('header.register')}
+                {modal.mode === "login" ? t("header.login") : t("header.register")}
               </h3>
-              <button className="text-gray-500 hover:text-black" onClick={() => setModal({ ...modal, open: false })}>✕</button>
+              <button className="text-gray-500 hover:text-black" onClick={() => setModal({ ...modal, open: false })}>
+                ✕
+              </button>
             </div>
 
-            {modal.mode === 'login' ? (
+            {modal.mode === "login" ? (
               <form className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Email</label>
@@ -608,13 +623,15 @@ export default function Header() {
                   <label className="block text-sm font-medium mb-1">{t("header.password")}</label>
                   <input type="password" required className="w-full px-3 py-2 border rounded" />
                 </div>
-                <button className="w-full bg-blue-600 text-white py-2 rounded">{t("header.login")}</button>
+                <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded">
+                  {t("header.login")}
+                </button>
                 <p className="text-sm text-center">
-                  {t("header.dontHaveAccount")}{' '}
+                  {t("header.dontHaveAccount")}{" "}
                   <button
                     type="button"
                     className="text-blue-600 underline"
-                    onClick={() => setModal({ open: true, mode: 'register' })}
+                    onClick={() => setModal({ open: true, mode: "register" })}
                   >
                     {t("header.register")}
                   </button>
@@ -634,14 +651,12 @@ export default function Header() {
                   <label className="block text-sm font-medium mb-1">{t("header.password")}</label>
                   <input type="password" required className="w-full px-3 py-2 border rounded" />
                 </div>
-                <button className="w-full bg-blue-600 text-white py-2 rounded">{t("header.register")}</button>
+                <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded">
+                  {t("header.register")}
+                </button>
                 <p className="text-sm text-center">
-                  {t("header.alreadyHaveAccount")}{' '}
-                  <button
-                    type="button"
-                    className="text-blue-600 underline"
-                    onClick={() => setModal({ open: true, mode: 'login' })}
-                  >
+                  {t("header.alreadyHaveAccount")}{" "}
+                  <button type="button" className="text-blue-600 underline" onClick={() => setModal({ open: true, mode: "login" })}>
                     {t("header.login")}
                   </button>
                 </p>
